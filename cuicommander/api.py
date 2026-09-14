@@ -8,6 +8,12 @@ from aiohttp import web
 from .discovery import discover
 from .downloads import start_download
 from .jobs import cancel_job, get_job, list_jobs
+from .local_admin import (
+    is_local_admin_request,
+    local_setup_payload,
+    rotate_local_access_key,
+    update_local_setup,
+)
 from .openapi import build_schema
 from .resources import (
     create_resource,
@@ -21,7 +27,7 @@ from .runtime import execute_native
 from .security import access_level, has_access, is_authorized, public_connection_info
 from .ui import register_ui_routes
 
-VERSION = "0.2.0-dev"
+VERSION = "0.3.0-dev"
 _REGISTERED = False
 
 
@@ -67,6 +73,18 @@ def _authorized(request: web.Request, minimum: str = "inspect") -> web.Response 
     return None
 
 
+def _local_admin_denied(request: web.Request) -> web.Response | None:
+    if is_local_admin_request(request):
+        return None
+    return _error(403, "local_only", "Local setup is available only from the loopback ComfyUI origin.")
+
+
+def _no_store_json(value: Any, status: int = 200) -> web.Response:
+    response = web.json_response(value, status=status)
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
 async def openapi_handler(request: web.Request) -> web.Response:
     server_url = f"{request.scheme}://{request.host}"
     return web.json_response(build_schema(server_url, VERSION))
@@ -94,6 +112,37 @@ async def manifest_handler(request: web.Request) -> web.Response:
             },
         }
     )
+
+
+async def local_setup_handler(request: web.Request) -> web.Response:
+    denied = _local_admin_denied(request)
+    if denied:
+        return denied
+    try:
+        return _no_store_json(local_setup_payload(request))
+    except Exception as error:
+        return _exception_response(error)
+
+
+async def local_setup_update_handler(request: web.Request) -> web.Response:
+    denied = _local_admin_denied(request)
+    if denied:
+        return denied
+    try:
+        return _no_store_json(update_local_setup(request, await _json(request)))
+    except Exception as error:
+        return _exception_response(error)
+
+
+async def local_rotate_handler(request: web.Request) -> web.Response:
+    denied = _local_admin_denied(request)
+    if denied:
+        return denied
+    try:
+        body = await _json(request)
+        return _no_store_json(rotate_local_access_key(request, body.get("confirmed") is True))
+    except Exception as error:
+        return _exception_response(error)
 
 
 async def discover_handler(request: web.Request) -> web.Response:
@@ -232,6 +281,9 @@ def register_routes() -> None:
     routes = PromptServer.instance.routes
     routes.get("/cuicommander/v1/openapi")(openapi_handler)
     routes.get("/cuicommander/v1/manifest")(manifest_handler)
+    routes.get("/cuicommander/v1/local/setup")(local_setup_handler)
+    routes.post("/cuicommander/v1/local/setup")(local_setup_update_handler)
+    routes.post("/cuicommander/v1/local/credential/rotate")(local_rotate_handler)
     routes.post("/cuicommander/v1/discover")(discover_handler)
     routes.post("/cuicommander/v1/resources/inspect")(inspect_handler)
     routes.post("/cuicommander/v1/resources/create")(create_handler)

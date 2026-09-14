@@ -1,4 +1,4 @@
-export type AccessLevel = 'inspect' | 'edit' | 'full'
+﻿export type AccessLevel = 'inspect' | 'edit' | 'full'
 
 export type RootSummary = {
   id: string
@@ -58,7 +58,7 @@ const capabilities: ControlPlaneSnapshot['capabilities'] = [
 ]
 
 export const developmentControlPlane: ControlPlaneSnapshot = {
-  version: '0.2.0-dev',
+  version: '0.3.0-dev',
   comfyVersion: 'live runtime required',
   status: 'needs-runtime',
   accessLevel: 'inspect',

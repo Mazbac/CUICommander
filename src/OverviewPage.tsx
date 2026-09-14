@@ -14,6 +14,7 @@ import {
   Text,
 } from '@mantine/core'
 import { PageHeader } from './components/ui/PageHeader'
+import { CustomGptSetup } from './components/CustomGptSetup'
 import { Section } from './components/ui/Section'
 import { useControlPlane } from './hooks/useControlPlane'
 
@@ -42,9 +43,11 @@ export function OverviewPage() {
     ? snapshot.status === 'ready'
       ? 'Ready'
       : 'Runtime needed'
-    : controlPlane.state === 'connecting'
-      ? 'Connecting'
-      : 'Authentication required'
+    : controlPlane.state === 'initializing'
+      ? 'Initializing'
+      : controlPlane.state === 'connecting'
+        ? 'Connecting'
+        : 'Authentication required'
 
   return (
     <Stack gap="xl">
@@ -78,7 +81,17 @@ export function OverviewPage() {
         description="One compact Action contract sits above the live ComfyUI runtime instead of one Action per node or model type."
       >
         <Paper withBorder p="lg">
-          {!snapshot && !import.meta.env.DEV ? (
+          {!snapshot &&
+          !import.meta.env.DEV &&
+          controlPlane.state === 'initializing' ? (
+            <Stack gap="xs">
+              <Text fw={600}>Checking local setup</Text>
+              <Text c="dimmed" size="sm">
+                Detecting the local CUICommander configuration and restoring a
+                browser-session connection when available.
+              </Text>
+            </Stack>
+          ) : !snapshot && !import.meta.env.DEV ? (
             <form onSubmit={submitConnection}>
               <Stack gap="md">
                 <Stack gap={4} maw={720}>
@@ -157,6 +170,13 @@ export function OverviewPage() {
 
       {snapshot && (
         <>
+          <CustomGptSetup
+            setup={controlPlane.localSetup}
+            busy={controlPlane.setupBusy}
+            error={controlPlane.setupError}
+            onUpdate={controlPlane.applyLocalSetup}
+            onRotateAccessKey={controlPlane.rotateAccessKey}
+          />
           <Section
             title="Universal control model"
             description="The stable machine vocabulary stays the same even when ComfyUI, models, or custom nodes change."

@@ -12,7 +12,7 @@
 ### Epic: Generic ComfyUI CRUD and transfers
 
 - [x] Create/update/move/delete files and directories inside discovered ComfyUI roots.
-- [x] Add background streaming downloads for large models/assets with progress, bounded retry, cancellation, optional checksum verification, and atomic destination finalization.
+- [x] Add background streaming downloads with progress, retry, cancellation, checksum verification, and atomic finalization.
 - [x] Live-accept success, checksum failure cleanup, and cancellation cleanup on the owner's ComfyUI runtime.
 - [ ] Verify a genuinely large model transfer into a dynamically registered model root.
 - [ ] Add durable activity/recovery semantics where restart survival materially improves safety.
@@ -20,8 +20,8 @@
 ### Epic: Native execution
 
 - [x] Invoke discovered ComfyUI/custom-node HTTP routes through one generic Full-control operation.
-- [x] Make native prompt, queue, history, job, and interrupt/cancel surfaces reachable through that same discovered-route executor rather than route-specific adapters.
-- [x] Live-accept prompt submission, history/queue inspection, confirmation gating, and an unknown custom-node route on the owner's ComfyUI runtime.
+- [x] Reach native prompt, queue, history, job, interrupt/cancel surfaces through the same discovered-route executor.
+- [x] Live-accept prompt submission, history/queue inspection, confirmation gating, and an unknown custom-node route on the owner's runtime.
 
 ### Epic: Embedded setup and Custom GPT Actions
 
@@ -29,16 +29,25 @@
 - [x] Load live manifest/root data in the production console after session-only authentication.
 - [x] Add repeatable live API and embedded-browser acceptance runners.
 - [x] Keep the compact Action schema endpoint as the machine contract.
-- [ ] Generate copy-ready Custom GPT instructions from the product control rules.
-- [ ] Present the public HTTPS schema URL and bearer-auth setup steps in a guided wizard.
-- [ ] Add readiness diagnostics for ComfyUI, CUICommander access level, HTTPS reachability, and Action endpoint health.
-- [ ] Complete end-to-end acceptance from an actual Custom GPT Action.
+- [x] Generate copy-ready Custom GPT instructions from the product control rules.
+- [x] Present the Action schema URL, Bearer-auth setup, access level, and credential controls in a guided localhost wizard.
+- [x] Keep local setup/admin operations loopback-only and outside the Action schema.
+- [x] Live-accept local auto-bootstrap, wizard rendering, reload, and Action-schema isolation against real ComfyUI.
+- [ ] Add external endpoint health diagnostics and complete end-to-end acceptance from an actual Custom GPT Action.
 
 ### Epic: Secure external reachability
 
 - [ ] Support a bounded HTTPS edge/tunnel configuration that exposes CUICommander routes without exposing raw ComfyUI.
 - [ ] Make the externally visible base URL stable enough for a saved Custom GPT Action.
-- [ ] Document credential rotation/revocation and recovery without committing or logging secrets.
+- [x] Provide local access-key rotation and prevent secrets from being committed or bundled.
+- [ ] Document revocation/recovery and verify the final remote authentication flow.
+
+### Epic: Operator surfaces
+
+- [ ] Add Resources browser/CRUD UI over live discovered roots.
+- [ ] Add Downloads/Jobs UI with progress, cancellation, result verification, and cleanup.
+- [ ] Add Runtime diagnostics for discovered nodes/routes, queue/history, and Execute.
+- [ ] Add higher-level workflow create/read/update/save/test flows without hardcoded model/node adapters.
 
 ### Epic: Full-control fallback
 

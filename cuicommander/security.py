@@ -6,6 +6,7 @@ import os
 import secrets
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 TOKEN_ENV = "CUICOMMANDER_API_TOKEN"
 ACCESS_ENV = "CUICOMMANDER_ACCESS"
@@ -23,6 +24,7 @@ def _state_directory() -> Path:
 
 def settings_path() -> Path:
     return _state_directory() / "connection.json"
+
 
 def _load_file() -> dict[str, Any]:
     path = settings_path()
@@ -47,6 +49,20 @@ def _write_file(value: dict[str, Any]) -> None:
     os.replace(temp, path)
 
 
+def _normalize_public_base_url(value: Any) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    parsed = urlsplit(text)
+    if parsed.scheme.lower() != "https" or not parsed.hostname:
+        raise ValueError("Public endpoint must be an https:// origin.")
+    if parsed.username or parsed.password or parsed.query or parsed.fragment:
+        raise ValueError("Public endpoint may not contain credentials, query, or fragment.")
+    if parsed.path not in {"", "/"}:
+        raise ValueError("Public endpoint must be an origin without a path.")
+    return f"https://{parsed.netloc}".rstrip("/")
+
+
 def ensure_settings() -> dict[str, Any]:
     value = _load_file()
     changed = False
@@ -56,6 +72,18 @@ def ensure_settings() -> dict[str, Any]:
     if value.get("accessLevel") not in _ACCESS_ORDER:
         value["accessLevel"] = "inspect"
         changed = True
+    public_base_url = value.get("publicBaseUrl")
+    if public_base_url is not None:
+        try:
+            normalized = _normalize_public_base_url(public_base_url)
+        except ValueError:
+            normalized = ""
+        if normalized != public_base_url:
+            if normalized:
+                value["publicBaseUrl"] = normalized
+            else:
+                value.pop("publicBaseUrl", None)
+            changed = True
     if changed:
         _write_file(value)
     return value
@@ -75,8 +103,52 @@ def access_level() -> str:
     return str(ensure_settings()["accessLevel"])
 
 
+def public_base_url() -> str:
+    return str(ensure_settings().get("publicBaseUrl", ""))
+
+
 def has_access(minimum: str) -> bool:
     return _ACCESS_ORDER.get(access_level(), -1) >= _ACCESS_ORDER[minimum]
+
+
+def set_access_level(value: Any) -> str:
+    normalized = str(value).strip().lower()
+    if normalized not in _ACCESS_ORDER:
+        raise ValueError("accessLevel must be inspect, edit, or full.")
+    if os.getenv(ACCESS_ENV, "").strip():
+        raise RuntimeError(f"Access level is controlled by {ACCESS_ENV}.")
+    settings = ensure_settings()
+    settings["accessLevel"] = normalized
+    _write_file(settings)
+    return normalized
+
+
+def set_public_base_url(value: Any) -> str:
+    normalized = _normalize_public_base_url(value)
+    settings = ensure_settings()
+    if normalized:
+        settings["publicBaseUrl"] = normalized
+    else:
+        settings.pop("publicBaseUrl", None)
+    _write_file(settings)
+    return normalized
+
+
+def rotate_token() -> str:
+    if os.getenv(TOKEN_ENV, "").strip():
+        raise RuntimeError(f"Access key is controlled by {TOKEN_ENV}.")
+    settings = ensure_settings()
+    settings["token"] = secrets.token_urlsafe(32)
+    _write_file(settings)
+    return str(settings["token"])
+
+
+def environment_overrides() -> dict[str, bool]:
+    return {
+        "accessLevel": bool(os.getenv(ACCESS_ENV, "").strip()),
+        "accessKey": bool(os.getenv(TOKEN_ENV, "").strip()),
+    }
+
 
 def is_authorized(request: Any) -> bool:
     header = request.headers.get("Authorization", "")
@@ -90,7 +162,7 @@ def is_authorized(request: Any) -> bool:
 def public_connection_info() -> dict[str, str]:
     return {
         "accessLevel": access_level(),
-        "credentialFile": str(settings_path()),
+        "publicBaseUrl": public_base_url(),
         "tokenEnvironmentVariable": TOKEN_ENV,
         "accessEnvironmentVariable": ACCESS_ENV,
     }

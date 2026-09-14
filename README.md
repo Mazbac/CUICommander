@@ -1,8 +1,8 @@
-﻿# CUICommander
+# CUICommander
 
-CUICommander is a universal control plane for ComfyUI designed for use from ChatGPT / Custom GPT Actions without building a bespoke adapter for every model family, node pack, or future ComfyUI feature.
+CUICommander is a universal control plane for ComfyUI designed for ChatGPT / Custom GPT Actions without building a bespoke adapter for every model family, node pack, or future ComfyUI feature.
 
-It is implemented as a ComfyUI custom-node/server extension: installing it under `custom_nodes` loads CUICommander into the same Python process as ComfyUI, where it can use live `PromptServer`, node-registry, and `folder_paths` state.
+It runs as a ComfyUI custom-node/server extension inside the same Python process as ComfyUI, where it can use live `PromptServer`, node-registry, and `folder_paths` state.
 
 ## Control model
 
@@ -16,26 +16,28 @@ Filesystem reach starts with the complete `folder_paths.base_path` ComfyUI tree 
 
 ## Current implementation
 
-Implemented today:
+Implemented and verified:
 
-- bearer-authenticated manifest and compact OpenAPI contract;
+- bearer-authenticated manifest and compact OpenAPI Action contract;
 - live root, node, and HTTP-route discovery;
-- generic file/directory inspection plus stale fingerprints;
-- generic create, update, move, and delete across the complete ComfyUI tree and registered external roots;
-- protected credential state, path/symlink containment, and cross-volume moves;
-- background HTTP(S) downloads into any discovered root with bounded progress records, cancellation, checksum verification, transient retry, partial-file cleanup, redirect validation, and private-network/SSRF blocking;
-- a single `executeComfyUI` operation that can invoke a route only when the requested method/path exists in the live ComfyUI router; mutating invocations require Full control and explicit confirmation;
-- bounded CUICommander job inspection/cancellation endpoints;
-- a small React/Mantine operational overview plus repository-wide Python/UI/browser verification.
+- generic file/directory inspect, create, update, move, and delete with stale fingerprints and root/symlink containment;
+- background HTTP(S) downloads into any discovered root with progress, cancellation, checksum verification, retry, atomic finalization, cleanup, and SSRF protections;
+- bounded CUICommander jobs plus one generic `executeComfyUI` operation for live discovered ComfyUI/custom-node routes;
+- real runtime acceptance for CRUD, downloads, native prompt/history/queue execution, and an existing custom-node route without an adapter;
+- an embedded React/Mantine console served at `/cuicommander/` by the same ComfyUI extension;
+- a localhost-only Custom GPT setup wizard for access level, public HTTPS origin, generated GPT instructions, Action schema URL, Bearer key, and key rotation;
+- local admin operations excluded from OpenAPI and protected by loopback/same-origin checks; secrets remain outside the repository and production bundle;
+- repository-wide Python, TypeScript, unit, browser accessibility, E2E, and visual-regression verification.
+  Because Execute delegates to the running ComfyUI HTTP surface, native `/prompt`, queue/job/history endpoints, and routes added later by custom nodes remain reachable without a CUICommander adapter.
 
-Because Execute delegates to the running ComfyUI HTTP surface, native `/prompt`, queue/job/history endpoints, and routes added later by custom nodes remain reachable without a CUICommander adapter.
+Next before a public MVP claim:
 
-Still in progress before the product can claim completed full-control acceptance:
-
-- live installation/acceptance against the owner's actual ComfyUI runtime, including prompt submission, job inspection/cancellation, and unknown custom-node route execution;
-- broaden the bounded ComfyUI-scoped fallback only where filesystem CRUD plus native routes cannot express a legitimate ComfyUI operation;
-- durable activity/recovery policy beyond the current bounded in-memory background-job records;
-- final embedded setup/connection UI and copy-ready Custom GPT instructions.
+- provide a bounded public HTTPS edge/tunnel that exposes CUICommander rather than raw ComfyUI;
+- verify the generated setup end-to-end from an actual Custom GPT Action;
+- add operator UI for Resources, Downloads/Jobs, and Runtime diagnostics;
+- add higher-level workflow create/read/update/save/test flows on top of live node/model discovery;
+- verify a genuinely large model transfer into a dynamically registered model root;
+- add durable recovery semantics where restart-survival materially improves safety.
 
 ## Development
 

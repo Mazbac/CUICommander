@@ -53,3 +53,7 @@ Large model and asset installation uses one root-targeted background download ca
 ## 2026-09-14 - D012: Custom GPT Actions are the primary ChatGPT integration
 
 CUICommander targets Custom GPT Actions as the primary MVP connection path wherever the user's ChatGPT environment supports them. The embedded setup surface must generate the required instructions, OpenAPI/schema URL, authentication guidance, readiness checks, and copy-ready setup steps. Public plugin/app submission is not an MVP prerequisite; alternative integration methods may be added later without changing the local universal control-plane architecture.
+
+## 2026-09-14 — D013: Local administration is not part of the Action contract
+
+Credential reveal/rotation, access-level changes, and public-endpoint setup are owner operations, not Custom GPT capabilities. They remain loopback/same-origin-only, use non-cacheable responses, stay absent from OpenAPI, and cannot be reached indirectly through `executeComfyUI`. This keeps remote Actions powerful inside the configured ComfyUI boundary without letting them reconfigure that boundary.
