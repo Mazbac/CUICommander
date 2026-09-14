@@ -1,10 +1,10 @@
 import { AppFrame } from './layouts/AppFrame'
-import { UiShowroom } from './dev/UiShowroom'
+import { OverviewPage } from './OverviewPage'
 
 function App() {
   return (
     <AppFrame>
-      <UiShowroom />
+      <OverviewPage />
     </AppFrame>
   )
 }

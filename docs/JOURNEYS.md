@@ -1,23 +1,17 @@
 # User lifecycle
 
-Select only the stages that apply to the product, but design those stages deliberately. A feature is not complete if it breaks the end-to-end journey around it.
-
-## Lifecycle map
-
-- Discover/acquire: how users reach the product and understand its purpose.
-- Install/open: platform-appropriate acquisition, prerequisites, failure/retry, and permissions.
-- First launch: reach useful product UI quickly; avoid ceremonial screens.
-- Required setup: ask only for information or connections needed to function.
-- Onboarding: teach contextually and minimally; optimize for the first successful task.
-- Normal/returning use: preserve appropriate preferences/state and make common work efficient.
-- Interruption/recovery: handle lost connectivity, expired sessions, restarts, denied permissions, retries, and partial work when relevant.
-- Update/migration: preserve data/config compatibility and provide recovery for consequential migrations.
-- Account/data management: make ownership, export, retention, cancellation, sign-out, and deletion semantics explicit.
-- Uninstall/leave: remove app-owned artifacts cleanly while preserving user-created data unless deletion is explicitly requested.
-- Reinstall/return: deliberately choose whether state is restored or reset.
-
 ## Product-specific journey
 
-Replace this section during intake with the actual shortest path from acquisition to the first successful outcome, plus consequential recovery/exit paths.
+1. Install CUICommander in ComfyUI `custom_nodes` and restart ComfyUI.
+2. Open the CUICommander setup surface and verify the live ComfyUI roots/runtime are detected.
+3. Create or rotate the connection credential, choose the intended access level, and copy the Action schema plus GPT instructions.
+4. Make the local ComfyUI HTTP endpoint available to the Custom GPT over a user-chosen authenticated HTTPS edge/tunnel; CUICommander does not require one tunnel vendor.
+5. In normal use, ChatGPT discovers current node/routes/roots first when needed, uses generic CRUD/native execution, then verifies the resulting ComfyUI state.
+6. Long model transfers and workflow runs expose durable job state so reconnects do not require guessing whether work completed.
 
-For each new feature ask whether it changes setup, onboarding, permissions, returning state, updates, export, account deletion, uninstall, or recovery. If none apply, do not add lifecycle ceremony.
+## Recovery and exit
+
+- Lost/compromised GPT credentials can be rotated without reinstalling CUICommander.
+- A failed or stale filesystem mutation must stop rather than overwrite newer state.
+- ComfyUI/custom-node updates must preserve the generic discovery contract; missing/deprecated upstream primitives surface as diagnostics, not silent behavior drift.
+- Uninstall removes CUICommander-owned settings/activity but never deletes user workflows, models, outputs, or unrelated ComfyUI data.

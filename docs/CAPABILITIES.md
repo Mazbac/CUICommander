@@ -1,27 +1,34 @@
 # Product classification and capability packs
 
-The core stays lean. During intake, classify the product and activate only relevant packs; each activated pack triggers current domain/platform research before implementation when requirements are consequential or unfamiliar.
-
 ## Product profile
 
-Record: distribution surface, primary device/input, user type, valuable/sensitive assets, external systems/actions, expected scale, regulatory domain, and risk level (`lightweight`, `standard`, or `high-consequence`).
+- Distribution: ComfyUI custom node/server extension plus authenticated REST/OpenAPI interface.
+- Primary user/input: ComfyUI owner issuing natural-language requests through ChatGPT; Custom GPT Actions are the first packaged connection path.
+- Valuable/sensitive assets: workflows, generation inputs/outputs, models, custom-node code, configuration, user data, and registered filesystem paths.
+- Expected scale: one workstation/ComfyUI instance per installation; interactive control plus long-running model transfers and workflow jobs.
+- Risk: high-consequence because valid operations can consume GPU resources or materially change the ComfyUI installation.
 
-## Capability packs
+## Activated capability packs
 
-- `auth`: sessions, recovery, reauthentication, authorization, password managers/identity providers.
-- `billing-money`: decimal precision, atomicity, duplicate prevention, checkout/renewal/cancellation/failure.
-- `files-import-export`: validation, size/type limits, progress, retry, corruption, compatibility, portability.
-- `background-jobs`: queued/running/retrying/failed/cancelled states, duplicate execution, restart recovery.
-- `realtime-collaboration`: freshness, reconnect, conflict/version strategy, presence/concurrent edits.
-- `offline-sync`: local state, reconciliation, conflict handling, multi-device behavior.
-- `notifications`: permission timing, preference controls, duplicates, delivery failure, fatigue/abuse.
-- `integrations-webhooks`: authentication/signatures, rate limits, retries, ordering, duplicates, provider outage.
-- `time-scheduling`: timezone, DST, recurring/wall-clock semantics, locale/calendar behavior.
-- `ai`: model/provider boundaries, prompt/version changes, malformed output, cost/rate limits, consequential confirmation.
-- `user-content`: hostile input, reporting/moderation where needed, rendering safety, abuse.
-- `desktop-mobile`: install/update/uninstall, window/background lifecycle, DPI/safe areas, OS conventions.
-- `regulated-domain`: apply current jurisdiction/domain requirements before design is locked.
+- `auth`: revocable bearer credential, privilege gates, secret handling, and no credential in repository/log output.
+- `files-import-export`: path containment, type/size awareness, progress, retry, stale protection, large-file behavior, and portability.
+- `background-jobs`: queued/running/succeeded/failed/cancelled state for downloads and ComfyUI work.
+- `integrations-webhooks`: stable REST/OpenAPI contract, request validation, replay/idempotency, and public-edge failure handling.
+- `ai`: schema constraints, untrusted discovered content, deterministic server verification, and consequential-operation confirmation.
+- `user-content`: workflows, node metadata, prompts, filenames, custom-node source, and outputs are untrusted data.
 
-## Abuse check
+## Generic control capabilities
 
-For consequential features ask: how can a normal authenticated user intentionally or accidentally repeat, race, bypass, exhaust, or misuse this operation? Add controls only where the answer creates meaningful risk.
+- Discover live node classes and their declared inputs/outputs/categories from ComfyUI's node registry.
+- Discover the active aiohttp route surface, including routes added by custom nodes.
+- Discover the ComfyUI base directory plus input/output/temp/user/models/custom-nodes and every model/path root registered through `folder_paths`.
+- Inspect files/directories with bounded previews and fingerprints without special knowledge of the file's vendor or model family.
+- Create, update, move, and delete ComfyUI-scoped filesystem resources with stale-state and path-boundary checks.
+- Stream or background-download large files into a selected discovered root so model installation is a generic filesystem operation.
+- Submit API-format workflows and inspect/cancel queue/job/history state through native ComfyUI primitives.
+- Invoke an existing ComfyUI/custom-node HTTP route generically when that is the narrowest available operation.
+- Keep activity/job records bounded and useful for verification/recovery.
+
+## No-adapter rule
+
+A new custom node, route, model type, or registered folder must not require a CUICommander release before ChatGPT can discover and operate it. Specialized knowledge may improve reasoning, but access must compile down to discovery, CRUD, native ComfyUI execution, or the bounded Full-control fallback.

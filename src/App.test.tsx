@@ -1,18 +1,24 @@
-import { render, screen } from '@testing-library/react'
 import { MantineProvider } from '@mantine/core'
+import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import App from './App'
 import { theme } from './theme/theme'
 
-describe('starter UI', () => {
-  it('renders the canonical UI baseline', () => {
+describe('CUICommander overview', () => {
+  it('renders the universal control-plane setup surface', () => {
     render(
       <MantineProvider theme={theme}>
         <App />
       </MantineProvider>,
     )
 
-    expect(screen.getByRole('heading', { name: 'UI baseline' })).toBeVisible()
-    expect(screen.getByRole('button', { name: 'Primary action' })).toBeVisible()
+    expect(screen.getByRole('heading', { name: 'CUICommander' })).toBeVisible()
+    expect(screen.getByText('Universal control model')).toBeVisible()
+    expect(screen.getByRole('table')).toHaveTextContent(
+      'ComfyUI base directory',
+    )
+    expect(
+      screen.getByRole('button', { name: 'Copy schema URL' }),
+    ).toBeEnabled()
   })
 })

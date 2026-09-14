@@ -30,3 +30,7 @@ dist-ssr
 coverage
 playwright-report
 test-results
+
+# Python
+__pycache__/
+*.py[cod]

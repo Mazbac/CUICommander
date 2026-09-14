@@ -25,3 +25,19 @@ Intentional design-system changes update shared primitives/tokens and reviewed b
 ## Adding decisions
 
 Use: date, stable ID, decision, and short reason. Add only when the choice is durable enough to affect future work.
+
+## 2026-09-14 — D006: CUICommander runs inside ComfyUI
+
+CUICommander is a ComfyUI custom node/server extension and uses the running ComfyUI Python process as its platform. Do not add a second normal-operation backend daemon when `PromptServer`, `nodes`, and `folder_paths` can provide the required source access.
+
+## 2026-09-14 — D007: Universal capability without provider adapters
+
+A ComfyUI-owned or registered subsystem must retain a generic control path without a node-suite, model-family, or vendor adapter. Generic discovery/CRUD/runtime execution are product architecture; specialized adapters are not required for reach.
+
+## 2026-09-14 — D008: The complete ComfyUI tree is a first-class root
+
+`folder_paths.base_path` is the canonical `comfyui` filesystem root. CUICommander also discovers all paths registered through `folder_paths`, including external model folders, so new path categories appear without code changes.
+
+## 2026-09-14 — D009: Machine language is generic CRUD plus Execute
+
+The machine-facing model is Discover/Inspect → Create/Read/Update/Delete → Execute. Installing a model is generic file creation/download into a discovered root; controlling an unknown custom-node route is generic native-route execution.
