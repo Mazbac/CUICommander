@@ -57,3 +57,9 @@ CUICommander targets Custom GPT Actions as the primary MVP connection path where
 ## 2026-09-14 — D013: Local administration is not part of the Action contract
 
 Credential reveal/rotation, access-level changes, and public-endpoint setup are owner operations, not Custom GPT capabilities. They remain loopback/same-origin-only, use non-cacheable responses, stay absent from OpenAPI, and cannot be reached indirectly through `executeComfyUI`. This keeps remote Actions powerful inside the configured ComfyUI boundary without letting them reconfigure that boundary.
+
+## 2026-09-14 — D014: Remote access is isolated and provider-neutral
+
+CUICommander must never require exposing raw ComfyUI to the public internet. Remote transports terminate at a loopback-only Action gateway whose routable surface is derived from the compact Action OpenAPI contract; local setup/admin and unrelated ComfyUI routes remain unreachable through it.
+
+The first built-in zero-cost transport is Tailscale Funnel because it provides public HTTPS without router port forwarding or a paid domain. CUICommander must inspect and preserve pre-existing Tailscale Serve/Funnel configuration, select only an unused allowed Funnel port, and never use reset as part of normal setup or teardown. Manual HTTPS origins and future transport providers remain valid alternatives without changing the Action contract.

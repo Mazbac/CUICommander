@@ -33,13 +33,15 @@
 - [x] Present the Action schema URL, Bearer-auth setup, access level, and credential controls in a guided localhost wizard.
 - [x] Keep local setup/admin operations loopback-only and outside the Action schema.
 - [x] Live-accept local auto-bootstrap, wizard rendering, reload, and Action-schema isolation against real ComfyUI.
-- [ ] Add external endpoint health diagnostics and complete end-to-end acceptance from an actual Custom GPT Action.
+- [x] Add external endpoint health diagnostics for the isolated Action gateway.
+- [ ] Complete end-to-end acceptance from an actual Custom GPT Action.
 
 ### Epic: Secure external reachability
 
-- [ ] Support a bounded HTTPS edge/tunnel configuration that exposes CUICommander routes without exposing raw ComfyUI.
-- [ ] Make the externally visible base URL stable enough for a saved Custom GPT Action.
+- [x] Support a bounded HTTPS Action gateway plus free Tailscale Funnel path without exposing raw ComfyUI.
+- [ ] Prove the generated Tailscale URL works with the current Custom GPT Actions network policy, including the owner's currently available non-standard Funnel port.
 - [x] Provide local access-key rotation and prevent secrets from being committed or bundled.
+- [ ] Finish first-run Tailscale onboarding for users who do not already have it installed/connected.
 - [ ] Document revocation/recovery and verify the final remote authentication flow.
 
 ### Epic: Operator surfaces

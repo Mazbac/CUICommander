@@ -174,8 +174,14 @@ export function OverviewPage() {
             setup={controlPlane.localSetup}
             busy={controlPlane.setupBusy}
             error={controlPlane.setupError}
+            remote={controlPlane.remoteAccess}
+            remoteBusy={controlPlane.remoteBusy}
+            remoteError={controlPlane.remoteError}
             onUpdate={controlPlane.applyLocalSetup}
             onRotateAccessKey={controlPlane.rotateAccessKey}
+            onRefreshRemoteAccess={controlPlane.refreshRemoteAccess}
+            onEnableRemoteAccess={controlPlane.enableRemoteAccess}
+            onDisableRemoteAccess={controlPlane.disableRemoteAccess}
           />
           <Section
             title="Universal control model"

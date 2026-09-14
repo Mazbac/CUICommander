@@ -18,13 +18,20 @@ import {
 import { Section } from './ui/Section'
 import type { AccessLevel } from '../data/controlPlane'
 import type { LocalSetupState, LocalSetupUpdate } from '../data/gptSetup'
+import type { RemoteAccessState } from '../data/remoteAccess'
 
 type CustomGptSetupProps = {
   setup: LocalSetupState | null
   busy: boolean
   error: string | null
+  remote: RemoteAccessState | null
+  remoteBusy: boolean
+  remoteError: string | null
   onUpdate: (update: LocalSetupUpdate) => Promise<void>
   onRotateAccessKey: () => Promise<void>
+  onRefreshRemoteAccess: () => Promise<void>
+  onEnableRemoteAccess: () => Promise<void>
+  onDisableRemoteAccess: () => Promise<void>
 }
 
 const accessOptions = [
@@ -37,8 +44,14 @@ export function CustomGptSetup({
   setup,
   busy,
   error,
+  remote,
+  remoteBusy,
+  remoteError,
   onUpdate,
   onRotateAccessKey,
+  onRefreshRemoteAccess,
+  onEnableRemoteAccess,
+  onDisableRemoteAccess,
 }: CustomGptSetupProps) {
   const endpointRef = useRef<HTMLInputElement>(null)
 
@@ -125,18 +138,119 @@ export function CustomGptSetup({
 
           <Paper withBorder p="lg">
             <Stack gap="sm">
-              <Text fw={600}>2. Public HTTPS endpoint</Text>
+              <Group justify="space-between" align="center" wrap="wrap">
+                <Text fw={600}>2. Remote access</Text>
+                <Button
+                  variant="subtle"
+                  size="compact-sm"
+                  onClick={() => void onRefreshRemoteAccess()}
+                  loading={remoteBusy}
+                >
+                  Refresh detection
+                </Button>
+              </Group>
+              <Text size="sm" c="dimmed">
+                CUICommander can create a free Tailscale Funnel to its isolated
+                Action gateway. Raw ComfyUI and local setup routes stay private.
+              </Text>
+              {remoteError && (
+                <Alert color="red" title="Remote access check failed">
+                  {remoteError}
+                </Alert>
+              )}
+              {!remote ? (
+                <Alert title="Remote access unavailable">
+                  Remote access can only be managed from the local ComfyUI
+                  machine.
+                </Alert>
+              ) : !remote.installed ? (
+                <Alert color="yellow" title="Tailscale is not installed">
+                  Install the free Tailscale client, sign in once, then choose
+                  Refresh detection. CUICommander will handle the Funnel setup.
+                </Alert>
+              ) : !remote.connected ? (
+                <Alert color="yellow" title="Connect Tailscale first">
+                  Tailscale {remote.version || 'is installed'}, but this PC is
+                  not currently connected to a tailnet.
+                </Alert>
+              ) : remote.active ? (
+                <>
+                  <Alert color="green" title="Remote access active">
+                    The public endpoint reaches only the authenticated
+                    CUICommander Action API.
+                  </Alert>
+                  <Code block>{remote.publicBaseUrl}</Code>
+                  <Group justify="space-between" align="center" wrap="wrap">
+                    <Badge color="green">
+                      Funnel HTTPS {remote.funnelPort}
+                    </Badge>
+                    <Button
+                      variant="outline"
+                      color="red"
+                      loading={remoteBusy}
+                      onClick={() => {
+                        if (
+                          window.confirm(
+                            'Disable CUICommander remote access? Your Custom GPT will stop connecting until it is enabled again.',
+                          )
+                        ) {
+                          void onDisableRemoteAccess()
+                        }
+                      }}
+                    >
+                      Disable remote access
+                    </Button>
+                  </Group>
+                </>
+              ) : (
+                <>
+                  <Alert color="blue" title="Tailscale ready">
+                    Connected as {remote.dnsName}. CUICommander detected{' '}
+                    {remote.existingServices} existing Tailscale service
+                    {remote.existingServices === 1 ? '' : 's'} and will preserve
+                    them.
+                  </Alert>
+                  <Group justify="space-between" align="center" wrap="wrap">
+                    <Badge variant="outline">
+                      {remote.recommendedFunnelPort
+                        ? `Free Funnel port: ${remote.recommendedFunnelPort}`
+                        : 'No free Funnel port'}
+                    </Badge>
+                    <Button
+                      onClick={() => void onEnableRemoteAccess()}
+                      loading={remoteBusy}
+                      disabled={!remote.recommendedFunnelPort}
+                    >
+                      Enable free remote access
+                    </Button>
+                  </Group>
+                </>
+              )}
+              <Text size="xs" c="dimmed">
+                Existing Tailscale Serve/Funnel entries are inspected first and
+                are never reset by CUICommander.
+              </Text>
+              <Text fw={500} size="sm">
+                Advanced: manual HTTPS origin
+              </Text>
               <TextInput
+                key={setup.publicBaseUrl}
                 label="Public origin"
                 placeholder="https://comfy.example.com"
                 defaultValue={setup.publicBaseUrl}
                 ref={endpointRef}
-                disabled={busy}
+                disabled={busy || remoteBusy || remote?.active}
               />
               <Text size="xs" c="dimmed">
-                Enter only the HTTPS origin that forwards to CUICommander. Do
-                not expose raw ComfyUI without the CUICommander auth boundary.
+                Advanced origins must terminate at the CUICommander Action API;
+                never publish raw ComfyUI port 8188 directly.
               </Text>
+              {remote?.active && (
+                <Text size="xs" c="dimmed">
+                  Disable managed remote access before switching to a manual
+                  HTTPS origin.
+                </Text>
+              )}
               <Group justify="space-between" align="center" wrap="wrap">
                 <Badge
                   color={setup.readiness.httpsEndpoint ? 'green' : 'yellow'}
@@ -145,8 +259,13 @@ export function CustomGptSetup({
                     ? 'HTTPS configured'
                     : 'HTTPS required'}
                 </Badge>
-                <Button variant="default" onClick={saveEndpoint} loading={busy}>
-                  Save endpoint
+                <Button
+                  variant="default"
+                  onClick={saveEndpoint}
+                  loading={busy}
+                  disabled={remote?.active}
+                >
+                  Save manual endpoint
                 </Button>
               </Group>
             </Stack>

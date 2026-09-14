@@ -1,4 +1,4 @@
-﻿import { readFileSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import process from 'node:process'
 import { chromium } from '@playwright/test'
 
@@ -66,6 +66,8 @@ try {
   const publicOrigin = page.getByLabel('Public origin')
   if (await publicOrigin.isVisible().catch(() => false)) {
     await page.getByText('Custom GPT setup', { exact: true }).waitFor()
+    await page.getByText('2. Remote access', { exact: true }).waitFor()
+    await page.getByRole('button', { name: 'Refresh detection' }).waitFor()
     await page.getByRole('button', { name: 'Copy instructions' }).waitFor()
     await page.getByRole('button', { name: 'Copy Action schema URL' }).waitFor()
     const localKey = await page.getByLabel('Action access key').inputValue()

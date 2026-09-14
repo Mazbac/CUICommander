@@ -13,6 +13,13 @@ import {
   type LocalSetupState,
   type LocalSetupUpdate,
 } from '../data/gptSetup'
+import {
+  developmentRemoteAccess,
+  disableTailscaleRemoteAccess,
+  enableTailscaleRemoteAccess,
+  loadRemoteAccess,
+  type RemoteAccessState,
+} from '../data/remoteAccess'
 
 const TOKEN_KEY = 'cuicommander.sessionToken'
 
@@ -32,12 +39,17 @@ export function useControlPlane() {
   const [localSetup, setLocalSetup] = useState<LocalSetupState | null>(
     development ? developmentLocalSetup : null,
   )
+  const [remoteAccess, setRemoteAccess] = useState<RemoteAccessState | null>(
+    development ? developmentRemoteAccess : null,
+  )
   const [state, setState] = useState<ConnectionState>(
     development ? 'development' : 'initializing',
   )
   const [error, setError] = useState<string | null>(null)
   const [setupError, setSetupError] = useState<string | null>(null)
   const [setupBusy, setSetupBusy] = useState(false)
+  const [remoteBusy, setRemoteBusy] = useState(false)
+  const [remoteError, setRemoteError] = useState<string | null>(null)
 
   const handleFailure = useCallback((requestError: unknown) => {
     if (
@@ -128,13 +140,87 @@ export function useControlPlane() {
     }
   }, [development])
 
+  const applyRemoteResult = useCallback(
+    async (nextRemote: RemoteAccessState) => {
+      const nextSetup = await loadLocalSetup()
+      if (!nextSetup) {
+        throw new Error(
+          'Local setup became unavailable after remote access changed.',
+        )
+      }
+      const nextSnapshot = await loadControlPlane(nextSetup.accessKey)
+      sessionStorage.setItem(TOKEN_KEY, nextSetup.accessKey)
+      setRemoteAccess(nextRemote)
+      setLocalSetup(nextSetup)
+      setSnapshot(nextSnapshot)
+      setError(null)
+      setState('ready')
+    },
+    [],
+  )
+
+  const refreshRemoteAccess = useCallback(async () => {
+    if (development) return
+    setRemoteBusy(true)
+    setRemoteError(null)
+    try {
+      const remote = await loadRemoteAccess()
+      setRemoteAccess(remote)
+      setRemoteError(remote?.lastError || null)
+    } catch (requestError) {
+      setRemoteError(
+        requestError instanceof Error
+          ? requestError.message
+          : 'Could not inspect remote access.',
+      )
+    } finally {
+      setRemoteBusy(false)
+    }
+  }, [development])
+
+  const enableRemoteAccess = useCallback(async () => {
+    if (development) return
+    setRemoteBusy(true)
+    setRemoteError(null)
+    try {
+      await applyRemoteResult(await enableTailscaleRemoteAccess())
+    } catch (requestError) {
+      setRemoteError(
+        requestError instanceof Error
+          ? requestError.message
+          : 'Could not enable remote access.',
+      )
+    } finally {
+      setRemoteBusy(false)
+    }
+  }, [applyRemoteResult, development])
+
+  const disableRemoteAccess = useCallback(async () => {
+    if (development) return
+    setRemoteBusy(true)
+    setRemoteError(null)
+    try {
+      await applyRemoteResult(await disableTailscaleRemoteAccess())
+    } catch (requestError) {
+      setRemoteError(
+        requestError instanceof Error
+          ? requestError.message
+          : 'Could not disable remote access.',
+      )
+    } finally {
+      setRemoteBusy(false)
+    }
+  }, [applyRemoteResult, development])
+
   const disconnect = useCallback(() => {
     if (development) return
     sessionStorage.removeItem(TOKEN_KEY)
     setSnapshot(null)
     setLocalSetup(null)
+    setRemoteAccess(null)
     setError(null)
     setSetupError(null)
+    setRemoteError(null)
     setState('needs-auth')
   }, [development])
 
@@ -147,12 +233,17 @@ export function useControlPlane() {
         const local = await loadLocalSetup()
         if (!active) return
         if (local) {
-          const next = await loadControlPlane(local.accessKey)
+          const [next, remote] = await Promise.all([
+            loadControlPlane(local.accessKey),
+            loadRemoteAccess(),
+          ])
           if (!active) return
           sessionStorage.setItem(TOKEN_KEY, local.accessKey)
           setLocalSetup(local)
+          setRemoteAccess(remote)
           setSnapshot(next)
           setError(null)
+          setRemoteError(remote?.lastError || null)
           setState('ready')
           return
         }
@@ -182,14 +273,20 @@ export function useControlPlane() {
   return {
     snapshot,
     localSetup,
+    remoteAccess,
     state,
     error,
     setupError,
     setupBusy,
+    remoteError,
+    remoteBusy,
     connect,
     disconnect,
     applyLocalSetup,
     rotateAccessKey,
+    refreshRemoteAccess,
+    enableRemoteAccess,
+    disableRemoteAccess,
     schemaUrl:
       localSetup?.gpt.schemaUrl ??
       snapshot?.schemaUrl ??

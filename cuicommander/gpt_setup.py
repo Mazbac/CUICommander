@@ -48,6 +48,7 @@ def setup_profile(public_base_url: str, fallback_origin: str) -> dict[str, Any]:
             "label": "Bearer access key",
         },
         "steps": [
+            "Enable CUICommander Remote access or configure your own HTTPS origin.",
             "Create a Custom GPT in ChatGPT.",
             "Paste the generated CUICommander instructions.",
             "Create an Action and import the generated OpenAPI schema URL.",

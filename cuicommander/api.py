@@ -26,8 +26,8 @@ from .roots import discover_roots
 from .runtime import execute_native
 from .security import access_level, has_access, is_authorized, public_connection_info
 from .ui import register_ui_routes
+from .version import VERSION
 
-VERSION = "0.3.0-dev"
 _REGISTERED = False
 
 

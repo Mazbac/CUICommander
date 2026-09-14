@@ -25,15 +25,16 @@ Implemented and verified:
 - bounded CUICommander jobs plus one generic `executeComfyUI` operation for live discovered ComfyUI/custom-node routes;
 - real runtime acceptance for CRUD, downloads, native prompt/history/queue execution, and an existing custom-node route without an adapter;
 - an embedded React/Mantine console served at `/cuicommander/` by the same ComfyUI extension;
-- a localhost-only Custom GPT setup wizard for access level, public HTTPS origin, generated GPT instructions, Action schema URL, Bearer key, and key rotation;
+- a localhost-only Custom GPT setup wizard for access level, generated GPT instructions, Action schema URL, Bearer key, and key rotation;
+- a free Remote access flow that detects Tailscale, preserves existing Serve/Funnel mappings, and exposes only an isolated CUICommander Action gateway rather than raw ComfyUI;
 - local admin operations excluded from OpenAPI and protected by loopback/same-origin checks; secrets remain outside the repository and production bundle;
-- repository-wide Python, TypeScript, unit, browser accessibility, E2E, and visual-regression verification.
+- repository-wide Python, TypeScript, unit, browser accessibility, E2E, visual-regression, Action-gateway isolation, and live Tailscale round-trip verification.
   Because Execute delegates to the running ComfyUI HTTP surface, native `/prompt`, queue/job/history endpoints, and routes added later by custom nodes remain reachable without a CUICommander adapter.
 
 Next before a public MVP claim:
 
-- provide a bounded public HTTPS edge/tunnel that exposes CUICommander rather than raw ComfyUI;
-- verify the generated setup end-to-end from an actual Custom GPT Action;
+- verify the generated Tailscale HTTPS endpoint end-to-end from an actual Custom GPT Action, including current support for the available Funnel port;
+- finish first-run Tailscale onboarding for users who do not already have the client installed and connected;
 - add operator UI for Resources, Downloads/Jobs, and Runtime diagnostics;
 - add higher-level workflow create/read/update/save/test flows on top of live node/model discovery;
 - verify a genuinely large model transfer into a dynamically registered model root;
