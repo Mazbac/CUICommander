@@ -19,9 +19,19 @@ from .resources import (
 from .roots import discover_roots
 from .runtime import execute_native
 from .security import access_level, has_access, is_authorized, public_connection_info
+from .ui import register_ui_routes
 
 VERSION = "0.2.0-dev"
 _REGISTERED = False
+
+
+def _comfyui_version() -> str:
+    try:
+        import comfyui_version
+
+        return str(comfyui_version.__version__)
+    except (ImportError, AttributeError):
+        return "unknown"
 
 
 def _error(status: int, code: str, message: str) -> web.Response:
@@ -69,7 +79,10 @@ async def manifest_handler(request: web.Request) -> web.Response:
     return web.json_response(
         {
             "version": VERSION,
+            "comfyVersion": _comfyui_version(),
             "accessLevel": access_level(),
+            "schemaUrl": f"{request.scheme}://{request.host}/cuicommander/v1/openapi",
+            "uiUrl": f"{request.scheme}://{request.host}/cuicommander/",
             "connection": public_connection_info(),
             "rootCount": len(discover_roots()),
             "machineModel": "Discover/Inspect -> Create/Read/Update/Delete -> Execute",
@@ -230,4 +243,5 @@ def register_routes() -> None:
     routes.get("/cuicommander/v1/jobs/{job_id}")(job_handler)
     routes.post("/cuicommander/v1/jobs/{job_id}/cancel")(cancel_job_handler)
     routes.post("/cuicommander/v1/execute")(execute_handler)
+    register_ui_routes(routes)
     _REGISTERED = True

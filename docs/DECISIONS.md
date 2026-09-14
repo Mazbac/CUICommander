@@ -49,3 +49,7 @@ The machine-facing model is Discover/Inspect → Create/Read/Update/Delete → E
 ## 2026-09-14 — D011: Model ingress is a generic transfer primitive
 
 Large model and asset installation uses one root-targeted background download capability rather than model-family installers. Downloads stream to a partial file, support progress/cancel/retry/checksum verification, finalize atomically, and reject private/local/reserved network destinations including redirect/DNS rebinding paths.
+
+## 2026-09-14 - D012: Custom GPT Actions are the primary ChatGPT integration
+
+CUICommander targets Custom GPT Actions as the primary MVP connection path wherever the user's ChatGPT environment supports them. The embedded setup surface must generate the required instructions, OpenAPI/schema URL, authentication guidance, readiness checks, and copy-ready setup steps. Public plugin/app submission is not an MVP prerequisite; alternative integration methods may be added later without changing the local universal control-plane architecture.

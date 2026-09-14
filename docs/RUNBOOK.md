@@ -25,3 +25,13 @@ A real project should add deployment, rollback, monitoring, backup/recovery, sup
 ## Parallel work
 
 Default: one AI writer per working tree. If parallel work is useful, create separate branches/worktrees, verify independently, then integrate deliberately.
+
+## Controlled live acceptance
+
+Live acceptance is separate from the default repository gate because it requires a running ComfyUI instance and a credential stored outside the repository.
+
+- Read-only API acceptance: set `CUICOMMANDER_TOKEN_FILE` to the runtime `connection.json`, optionally set `CUICOMMANDER_BASE_URL`, then run `python scripts/live_acceptance.py`.
+- Mutating acceptance: run the same script with `--mutating` only against a deliberately Full-control local instance. The runner creates uniquely named acceptance resources and removes them afterward.
+- Embedded browser acceptance: with the same environment variables, run `node scripts/live-ui-acceptance.mjs`.
+- Never print, commit, or paste the configured access key into test source or shell history.
+- Do not force-restart an owner's active ComfyUI session merely to validate a development build; prefer an isolated localhost test instance when practical.
