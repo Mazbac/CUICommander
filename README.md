@@ -1,4 +1,4 @@
-# CUICommander
+﻿# CUICommander
 
 CUICommander is a universal control plane for ComfyUI designed for use from ChatGPT / Custom GPT Actions without building a bespoke adapter for every model family, node pack, or future ComfyUI feature.
 
@@ -14,27 +14,28 @@ The no-adapter invariant is deliberate. CUICommander discovers the running insta
 
 Filesystem reach starts with the complete `folder_paths.base_path` ComfyUI tree and also includes every path dynamically registered through `folder_paths`, including external model roots.
 
-## Current foundation
+## Current implementation
 
 Implemented today:
 
 - bearer-authenticated manifest and compact OpenAPI contract;
 - live root, node, and HTTP-route discovery;
-- generic file/directory inspection with fingerprints;
-- generic create, update, move, and delete operations;
-- containment checks that prevent root escape and protect CUICommander credential state;
-- stale-state checks for file and directory mutations;
-- cross-root moves, including registered roots on another filesystem/volume;
-- a small React/Mantine operational overview used while developing the in-ComfyUI setup surface;
-- Python backend checks integrated into the repository verification gate.
+- generic file/directory inspection plus stale fingerprints;
+- generic create, update, move, and delete across the complete ComfyUI tree and registered external roots;
+- protected credential state, path/symlink containment, and cross-volume moves;
+- background HTTP(S) downloads into any discovered root with bounded progress records, cancellation, checksum verification, transient retry, partial-file cleanup, redirect validation, and private-network/SSRF blocking;
+- a single `executeComfyUI` operation that can invoke a route only when the requested method/path exists in the live ComfyUI router; mutating invocations require Full control and explicit confirmation;
+- bounded CUICommander job inspection/cancellation endpoints;
+- a small React/Mantine operational overview plus repository-wide Python/UI/browser verification.
 
-Still in progress before the product can claim full ComfyUI control:
+Because Execute delegates to the running ComfyUI HTTP surface, native `/prompt`, queue/job/history endpoints, and routes added later by custom nodes remain reachable without a CUICommander adapter.
 
-- native workflow, queue, job, history, interrupt, and result execution primitives;
-- safe background downloads for models and other large ComfyUI resources;
-- the gated ComfyUI-scoped full-control fallback for operations not expressible through narrower primitives;
-- live installation/acceptance against the owner's actual ComfyUI runtime;
-- final in-ComfyUI setup/connection UI and Custom GPT instructions.
+Still in progress before the product can claim completed full-control acceptance:
+
+- live installation/acceptance against the owner's actual ComfyUI runtime, including prompt submission, job inspection/cancellation, and unknown custom-node route execution;
+- broaden the bounded ComfyUI-scoped fallback only where filesystem CRUD plus native routes cannot express a legitimate ComfyUI operation;
+- durable activity/recovery policy beyond the current bounded in-memory background-job records;
+- final embedded setup/connection UI and copy-ready Custom GPT instructions.
 
 ## Development
 

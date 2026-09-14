@@ -1,4 +1,4 @@
-export type AccessLevel = 'inspect' | 'edit' | 'full'
+﻿export type AccessLevel = 'inspect' | 'edit' | 'full'
 
 export type RootSummary = {
   id: string
@@ -22,7 +22,7 @@ export type ControlPlaneSnapshot = {
 }
 
 export const developmentControlPlane: ControlPlaneSnapshot = {
-  version: '0.1.0-dev',
+  version: '0.2.0-dev',
   comfyVersion: 'live runtime required',
   status: 'needs-runtime',
   accessLevel: 'inspect',
@@ -57,9 +57,9 @@ export const developmentControlPlane: ControlPlaneSnapshot = {
       access: 'read',
     },
     {
-      title: 'Generic CRUD',
+      title: 'CRUD + transfers',
       description:
-        'Create, replace, move, and delete ComfyUI-scoped files and directories with stale-state protection.',
+        'Create, replace, move, delete, and background-download ComfyUI-scoped resources with stale-state and transfer safeguards.',
       access: 'write',
     },
     {

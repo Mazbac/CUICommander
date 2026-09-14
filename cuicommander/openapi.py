@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from typing import Any
 
@@ -70,7 +70,7 @@ def _paths(root: dict[str, Any], path: dict[str, Any], fingerprint: dict[str, An
                 "responses": ok,
             }
         },
-    } | _mutation_paths(root, path, fingerprint, content, content64, ok)
+    } | _mutation_paths(root, path, fingerprint, content, content64, ok) | _advanced_paths(root, path, ok)
 
 def _mutation_paths(root: dict[str, Any], path: dict[str, Any], fingerprint: dict[str, Any], content: dict[str, Any], content64: dict[str, Any], ok: dict[str, Any]) -> dict[str, Any]:
     common_content = {"content": content, "contentBase64": content64}
@@ -133,6 +133,83 @@ def _mutation_paths(root: dict[str, Any], path: dict[str, Any], fingerprint: dic
                         "confirmed": {"type": "boolean"},
                     },
                     ["root", "path", "confirmed"],
+                ),
+                "responses": ok,
+            }
+        },
+    }
+
+
+
+def _advanced_paths(root: dict[str, Any], path: dict[str, Any], ok: dict[str, Any]) -> dict[str, Any]:
+    job_id = {
+        "name": "job_id",
+        "in": "path",
+        "required": True,
+        "schema": {"type": "string", "format": "uuid"},
+    }
+    return {
+        "/cuicommander/v1/downloads": {
+            "post": {
+                "operationId": "downloadComfyUIResource",
+                "summary": "Start a background download into any discovered ComfyUI root",
+                "requestBody": _json_body(
+                    {
+                        "root": root,
+                        "path": path,
+                        "url": {"type": "string", "format": "uri"},
+                        "expectedSha256": {"type": "string", "pattern": "^[a-fA-F0-9]{64}$"},
+                        "headers": {"type": "object", "additionalProperties": {"type": "string"}},
+                    },
+                    ["root", "path", "url"],
+                ),
+                "responses": {"202": {"description": "Download job accepted"}},
+            }
+        },
+        "/cuicommander/v1/jobs": {
+            "get": {
+                "operationId": "listCUICommanderJobs",
+                "summary": "List recent CUICommander background jobs",
+                "parameters": [
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "schema": {"type": "integer", "minimum": 1, "maximum": 100},
+                    }
+                ],
+                "responses": ok,
+            }
+        },
+        "/cuicommander/v1/jobs/{job_id}": {
+            "get": {
+                "operationId": "getCUICommanderJob",
+                "summary": "Inspect one CUICommander background job",
+                "parameters": [job_id],
+                "responses": ok,
+            }
+        },
+        "/cuicommander/v1/jobs/{job_id}/cancel": {
+            "post": {
+                "operationId": "cancelCUICommanderJob",
+                "summary": "Cancel a running CUICommander background job",
+                "parameters": [job_id],
+                "requestBody": _json_body({"confirmed": {"type": "boolean"}}, ["confirmed"]),
+                "responses": ok,
+            }
+        },
+        "/cuicommander/v1/execute": {
+            "post": {
+                "operationId": "executeComfyUI",
+                "summary": "Invoke a discovered native ComfyUI or custom-node HTTP route",
+                "requestBody": _json_body(
+                    {
+                        "method": {"type": "string", "enum": ["GET", "POST", "PUT", "PATCH", "DELETE"]},
+                        "route": {"type": "string", "maxLength": 2000},
+                        "query": {"type": "object", "additionalProperties": True},
+                        "body": {},
+                        "confirmed": {"type": "boolean"},
+                    },
+                    ["method", "route"],
                 ),
                 "responses": ok,
             }

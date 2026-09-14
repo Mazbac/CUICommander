@@ -1,4 +1,5 @@
 import { spawnSync } from 'node:child_process'
+import { readdirSync } from 'node:fs'
 
 const candidates = [
   { command: 'python', prefix: [] },
@@ -20,12 +21,9 @@ if (!interpreter) {
 
 const pythonFiles = [
   '__init__.py',
-  'cuicommander/security.py',
-  'cuicommander/roots.py',
-  'cuicommander/resources.py',
-  'cuicommander/discovery.py',
-  'cuicommander/openapi.py',
-  'cuicommander/api.py',
+  ...readdirSync('cuicommander')
+    .filter((file) => file.endsWith('.py'))
+    .map((file) => `cuicommander/${file}`),
 ]
 
 function run(args, label) {

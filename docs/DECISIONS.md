@@ -41,3 +41,11 @@ A ComfyUI-owned or registered subsystem must retain a generic control path witho
 ## 2026-09-14 — D009: Machine language is generic CRUD plus Execute
 
 The machine-facing model is Discover/Inspect → Create/Read/Update/Delete → Execute. Installing a model is generic file creation/download into a discovered root; controlling an unknown custom-node route is generic native-route execution.
+
+## 2026-09-14 — D010: Execute delegates to live ComfyUI routes
+
+`executeComfyUI` is a generic executor for method/path pairs that already exist in the live ComfyUI aiohttp router. It does not reimplement `/prompt`, queue/history/jobs, or custom-node route behavior. This keeps new upstream/custom-node routes reachable without CUICommander adapters while preserving Full-control gating and explicit confirmation for mutating methods.
+
+## 2026-09-14 — D011: Model ingress is a generic transfer primitive
+
+Large model and asset installation uses one root-targeted background download capability rather than model-family installers. Downloads stream to a partial file, support progress/cancel/retry/checksum verification, finalize atomically, and reject private/local/reserved network destinations including redirect/DNS rebinding paths.
