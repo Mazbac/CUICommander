@@ -38,16 +38,17 @@
 - Workflow/operator mutation acceptance queues a real tiny native prompt, verifies completion/activity, and cleans up the generated workflow/output.
 - On 2026-09-15 a real Custom GPT Action call reached the public HTTPS endpoint, discovered live nodes/routes, submitted a native prompt, and verified successful history/output; this closes the original first-Action network acceptance blocker.
 - On 2026-09-15 an isolated real ComfyUI 0.35.1 instance reconstructed a 188,908-byte workflow in two authenticated resource chunks and parsed it as JSON. The same live pass verified repeated append patches plus complete readback/cleanup and completed a tiny native prompt. The sampled `/object_info` response fit below the 2 MiB inline limit, so oversized native-response continuation remains unit-tested rather than live-triggered in that pass.
+- Later on 2026-09-15 the owner's normal 8188 runtime was deliberately restarted onto the current release-candidate code with an empty queue. Through the public Tailscale Action endpoint, a current 290,301-byte workflow was reconstructed and JSON-validated in three chunks; a second public mutating pass verified CRUD, repeated chunk patches/readback/cleanup, native `/system_stats`, and a successful tiny prompt plus cleanup.
+- The isolated Tailscale Action node now has an enabled highest-privilege at-logon Scheduled Task. A controlled handoff stopped only the CUICommander-owned userspace daemon, started it through that task, verified the Action node online, restored the existing Funnel mapping, and repeated the public large-resource acceptance successfully.
 
 ## Remaining external acceptance / release blockers
 
-1. Restart/deploy the owner's normal 8188 runtime onto this current release-candidate code, refresh the Custom GPT's pasted Action schema/instructions so it knows the new continuation operations, and repeat the large-resource read through the actual GPT UI.
-2. With the owner present for Windows UAC, install/verify the `CUICommander Action Tailscale` Scheduled Task so the isolated Action node survives logoff/reboot. The current isolated node is live, but this unattended pass confirmed that the persistence task is not yet installed.
-3. Verify one genuinely large public model transfer into a dynamically registered model root if desired before calling transfer acceptance exhaustive.
-4. Claim/configure the Comfy Registry publisher and publishing secret before public Manager/Registry release.
+1. Refresh the Custom GPT's pasted Action schema/instructions so it knows the continuation operations, then repeat the large-resource read through the actual GPT UI.
+2. Verify one genuinely large public model transfer into a dynamically registered model root if desired before calling transfer acceptance exhaustive.
+3. Claim/configure the Comfy Registry publisher and publishing secret before public Manager/Registry release.
 
 ## Runtime note
 
-- The owner's normal ComfyUI listener on port 8188 is still the pre-continuation runtime during this unattended pass. New chunked read/patch and pageable/retained-response behavior was loaded and accepted on isolated localhost port 8199, which was stopped afterward. Restarting 8188 remains deliberate so active owner work is not disrupted unattended.
+- The owner's normal ComfyUI listener on port 8188 now runs the current release-candidate code. Its public Action gateway advertises the chunked resource read/patch and retained native-response continuation routes, and both read-only and mutating public acceptance pass after the controlled restart.
 
 No additional full-control fallback primitive is currently justified: tested ComfyUI-owned surfaces are reachable through discovered filesystem roots or the live native route table. If a future ComfyUI-owned capability is proven unreachable by those planes, add the smallest bounded generic fallback rather than a provider adapter.
