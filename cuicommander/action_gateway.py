@@ -10,6 +10,15 @@ MAX_PROXY_RESPONSE_BYTES = 4 * 1024 * 1024
 _FORWARDED_REQUEST_HEADERS = {"authorization", "accept", "content-type"}
 
 
+async def _read_limited_response(response: Any, limit: int = MAX_PROXY_RESPONSE_BYTES) -> bytes:
+    raw = bytearray()
+    async for chunk in response.content.iter_chunked(64 * 1024):
+        raw.extend(chunk)
+        if len(raw) > limit:
+            raise OverflowError("Action gateway response exceeded the safety limit.")
+    return bytes(raw)
+
+
 class ActionGateway:
     def __init__(self) -> None:
         self._runner: Any = None
@@ -129,12 +138,13 @@ class ActionGateway:
                 ssl=False if tls else None,
                 allow_redirects=False,
             ) as response:
-                raw = await response.content.read(MAX_PROXY_RESPONSE_BYTES + 1)
-                if len(raw) > MAX_PROXY_RESPONSE_BYTES:
+                try:
+                    raw = await _read_limited_response(response)
+                except OverflowError as error:
                     return web.json_response(
                         {
                             "error": "response_too_large",
-                            "message": "Action gateway response exceeded the safety limit.",
+                            "message": str(error),
                         },
                         status=502,
                     )

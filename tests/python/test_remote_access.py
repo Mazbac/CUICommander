@@ -7,7 +7,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, call, patch
 
-from cuicommander.action_gateway import ActionGateway
+from cuicommander.action_gateway import ActionGateway, _read_limited_response
 from cuicommander import remote_access
 from cuicommander.remote_access import (
     _choose_funnel_port,
@@ -88,7 +88,28 @@ class RemoteAccessPlanningTests(unittest.TestCase):
         )
 
 
-class ActionGatewayTests(unittest.TestCase):
+class _ChunkedContent:
+    def __init__(self, chunks: list[bytes]) -> None:
+        self._chunks = chunks
+
+    async def iter_chunked(self, size: int):
+        del size
+        for chunk in self._chunks:
+            yield chunk
+
+
+class ActionGatewayTests(unittest.IsolatedAsyncioTestCase):
+    async def test_limited_response_collects_all_network_chunks(self) -> None:
+        response = SimpleNamespace(content=_ChunkedContent([b'{"content":"', b'x' * 512, b'"}']))
+        raw = await _read_limited_response(response, 1024)
+        self.assertEqual(raw, b'{"content":"' + (b'x' * 512) + b'"}')
+        self.assertEqual(json.loads(raw)["content"], "x" * 512)
+
+    async def test_limited_response_rejects_body_over_limit(self) -> None:
+        response = SimpleNamespace(content=_ChunkedContent([b'a' * 600, b'b' * 500]))
+        with self.assertRaisesRegex(OverflowError, "safety limit"):
+            await _read_limited_response(response, 1024)
+
     def test_openapi_payload_is_rewritten_to_public_origin(self) -> None:
         gateway = ActionGateway()
         gateway._public_origin = "https://pc.example.ts.net:10000"
