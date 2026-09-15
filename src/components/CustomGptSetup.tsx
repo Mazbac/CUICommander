@@ -55,31 +55,25 @@ function StepLabel({
   complete: boolean
 }) {
   return (
-    <Group
-      justify="space-between"
-      gap="sm"
-      wrap="nowrap"
-      pr="xs"
-      align="flex-start"
-    >
-      <Group gap="sm" wrap="nowrap" flex={1} miw={0}>
-        <Badge variant="light" color={complete ? 'green' : 'brand'}>
-          {number}
-        </Badge>
-        <Stack gap={0} miw={0}>
+    <Group gap="sm" wrap="nowrap" pr="xs" align="flex-start">
+      <Text size="sm" c="dimmed" w={18} ta="center">
+        {number}
+      </Text>
+      <Stack gap={0} miw={0}>
+        <Group gap="xs" wrap="nowrap">
           <Text fw={650}>{title}</Text>
-          <Text size="xs" c="dimmed">
-            {description}
-          </Text>
-        </Stack>
-      </Group>
-      <Badge
-        color={complete ? 'green' : 'gray'}
-        variant="light"
-        visibleFrom="sm"
-      >
-        {complete ? 'Ready' : 'To do'}
-      </Badge>
+          {complete ? (
+            <span
+              className="cc-status-dot"
+              data-tone="success"
+              aria-label="Complete"
+            />
+          ) : null}
+        </Group>
+        <Text size="xs" c="dimmed">
+          {description}
+        </Text>
+      </Stack>
     </Group>
   )
 }
@@ -148,7 +142,7 @@ export function CustomGptSetup({
   return (
     <Section
       title="Connect ChatGPT"
-      description="Three guided steps take this ComfyUI instance from local-only to a working Custom GPT connection."
+      description="Configure access, create the secure endpoint, then copy the connection details into ChatGPT."
     >
       <Stack gap="md">
         <Paper withBorder p={{ base: 'md', sm: 'lg' }} className="cc-surface">

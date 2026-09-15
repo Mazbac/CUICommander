@@ -18,6 +18,15 @@ Prefer reusable primitives such as `AppFrame`, `PageHeader`, `Section`, `Toolbar
 
 Before implementing a screen, inspect the closest analogous screen. New list pages should resemble established list pages; settings should use established settings structure; destructive flows should reuse the canonical confirmation pattern.
 
+## Product information architecture
+
+- Primary navigation is **Home / ChatGPT / Activity / Advanced**.
+- Home answers whether the bridge is usable, what happened recently, and what needs attention.
+- ChatGPT owns setup, access, remote connectivity, credentials, and recovery.
+- Activity is the human-readable audit trail for consequential operations.
+- Files/resources, transfers/jobs, workflows, and runtime remain fully capable operator tools under Advanced; they do not compete with the core product journey.
+- ChatGPT is where the user asks, ComfyUI is where work runs, and CUICommander is where the bridge is configured, supervised, and recovered.
+
 ## Visual tokens
 
 Typography, spacing, control sizes, radii, borders, colors, shadows, breakpoints, focus treatment, and motion belong to the theme or shared components. Semantic color communicates status; color is never the only status signal.
@@ -30,7 +39,7 @@ Typography, spacing, control sizes, radii, borders, colors, shadows, breakpoints
 - Appearance supports System, Light, and Dark. System is the default; an explicit user choice persists through Mantine color-scheme storage.
 - Cards and setup surfaces use the shared surface radius; controls and navigation use the shared control radius. Feature screens do not invent local corner styles.
 - The shell uses a quiet neutral background with white/dark shared surfaces and one border token. Shadows are exceptional, not structural.
-- Status badges use high-contrast foregrounds and text labels; do not rely on color alone. Warning surfaces must meet WCAG AA in both supported color schemes.
+- Status is normally expressed with concise text and, when useful, a small semantic indicator. Pills/badges are reserved for compact categorical metadata, not decorative state labels; never rely on color alone.
 - First-run setup uses progressive disclosure: show the next required step, keep advanced transport/schema details secondary, and never expose raw ComfyUI as the public endpoint.
 - Reflow is a release gate at 320px, 390px, and desktop widths; clipped badges, horizontal overflow, and one-off responsive exceptions are regressions.
 

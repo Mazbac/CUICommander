@@ -17,7 +17,7 @@
 - Background downloads enforce public HTTP(S), DNS/redirect revalidation, bounded retries/progress/cancellation/checksum verification, partial cleanup, and atomic finalization.
 - Jobs persist outside the process. Nonterminal jobs restored after a restart become explicit `interrupted` records instead of disappearing.
 - Mutation activity is persisted as a bounded redacted audit feed; credentials, authorization headers, and file contents are not recorded.
-- Production React console is served at `/cuicommander/` and now includes Overview, Resources, Transfers & Jobs, Workflows, Runtime, and Activity surfaces.
+- Production React console is served at `/cuicommander/` with primary navigation for Home, ChatGPT, Activity, and Advanced. Resources, Transfers & Jobs, Workflows, and Runtime remain fully capable operator tools under Advanced.
 - Resources browses discovered roots, pages large directories, can load complete large UTF-8 files beyond the preview limit, and supports inspect/create/update/move/delete with stale-state protection.
 - Transfers & Jobs starts generic downloads, reports progress/state, and supports cancellation.
 - Workflows loads complete API-format prompt JSON through chunked reads when necessary, saves with fingerprint protection, and queues it through the live native `/prompt` route.
@@ -30,9 +30,9 @@
 
 ## Verification
 
-- `npm run verify:full` passes with 60 Python backend tests, 6 frontend unit tests, formatting, lint, TypeScript, UI conformance, package metadata, production build, 3 Chromium accessibility/E2E tests, and 5 reviewed visual-regression cases.
-- Chromium accessibility/E2E walks every operator page and currently passes with zero axe violations.
-- Desktop, mobile, narrow, and dark-mode overview visual regression currently passes.
+- `npm run verify:full` passes with 60 Python backend tests, 6 frontend unit tests, formatting, lint, TypeScript, UI conformance, package metadata, production build, 4 Chromium accessibility/E2E tests, and 5 reviewed visual-regression cases.
+- Chromium accessibility/E2E covers all primary product pages plus every Advanced operator tool and currently passes with zero axe violations.
+- Desktop, mobile, narrow, and dark-mode Home visual regression currently passes after the simplified product-shell redesign.
 - Action-gateway isolation and a fresh 0.5 Tailscale Funnel round-trip prove authenticated Action routes are public while raw ComfyUI/local admin remain unreachable; the existing machine Serve/Funnel mappings are unchanged before/after.
 - 0.5 embedded UI acceptance passes against an isolated real ComfyUI 0.35.1 runtime, including all six operator pages and duplicate live root registrations.
 - Workflow/operator mutation acceptance queues a real tiny native prompt, verifies completion/activity, and cleans up the generated workflow/output.

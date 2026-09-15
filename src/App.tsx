@@ -1,7 +1,8 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
-import { Center, Loader } from '@mantine/core'
+import { AdvancedPage } from './AdvancedPage'
+import { ConnectionPage } from './ConnectionPage'
+import { HomePage } from './HomePage'
 import { AppFrame, type PageId } from './layouts/AppFrame'
-import { OverviewPage } from './OverviewPage'
 import { useControlPlane } from './hooks/useControlPlane'
 
 const ResourcesPage = lazy(() =>
@@ -27,17 +28,20 @@ const ActivityPage = lazy(() =>
 )
 
 const validPages = new Set<PageId>([
-  'overview',
+  'home',
+  'chatgpt',
+  'activity',
+  'advanced',
   'resources',
   'transfers',
   'workflows',
   'runtime',
-  'activity',
 ])
 
 function pageFromHash(): PageId {
-  const value = window.location.hash.replace(/^#\/?/, '') || 'overview'
-  return validPages.has(value as PageId) ? (value as PageId) : 'overview'
+  const value = window.location.hash.replace(/^#\/?/, '') || 'home'
+  if (value === 'overview') return 'home'
+  return validPages.has(value as PageId) ? (value as PageId) : 'home'
 }
 
 function App() {
@@ -51,12 +55,16 @@ function App() {
   }, [])
 
   const navigate = (next: PageId) => {
-    const hash = next === 'overview' ? '#/' : `#/${next}`
+    const hash = next === 'home' ? '#/' : `#/${next}`
     if (window.location.hash !== hash) window.location.hash = hash
     setPage(next)
   }
 
   const content = (() => {
+    if (page === 'chatgpt')
+      return <ConnectionPage controlPlane={controlPlane} />
+    if (page === 'activity') return <ActivityPage controlPlane={controlPlane} />
+    if (page === 'advanced') return <AdvancedPage onNavigate={navigate} />
     if (page === 'resources')
       return <ResourcesPage controlPlane={controlPlane} />
     if (page === 'transfers')
@@ -64,21 +72,12 @@ function App() {
     if (page === 'workflows')
       return <WorkflowsPage controlPlane={controlPlane} />
     if (page === 'runtime') return <RuntimePage controlPlane={controlPlane} />
-    if (page === 'activity') return <ActivityPage controlPlane={controlPlane} />
-    return <OverviewPage controlPlane={controlPlane} />
+    return <HomePage controlPlane={controlPlane} onNavigate={navigate} />
   })()
 
   return (
     <AppFrame activePage={page} onNavigate={navigate}>
-      <Suspense
-        fallback={
-          <Center py="xl" aria-label="Loading page">
-            <Loader size="sm" />
-          </Center>
-        }
-      >
-        {content}
-      </Suspense>
+      <Suspense fallback={null}>{content}</Suspense>
     </AppFrame>
   )
 }

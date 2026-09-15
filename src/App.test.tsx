@@ -4,23 +4,23 @@ import { describe, expect, it } from 'vitest'
 import App from './App'
 import { theme } from './theme/theme'
 
-describe('CUICommander overview', () => {
-  it('renders the guided setup and live control-plane summary', () => {
+describe('CUICommander shell', () => {
+  it('renders the simplified product navigation and home status', () => {
     render(
       <MantineProvider theme={theme}>
         <App />
       </MantineProvider>,
     )
 
-    expect(screen.getByRole('heading', { name: 'CUICommander' })).toBeVisible()
+    expect(screen.getByRole('heading', { name: 'Home' })).toBeVisible()
+    expect(screen.getByRole('link', { name: 'Home' })).toBeVisible()
+    expect(screen.getByRole('link', { name: 'ChatGPT' })).toBeVisible()
+    expect(screen.getByRole('link', { name: 'Activity' })).toBeVisible()
+    expect(screen.getByRole('link', { name: 'Advanced' })).toBeVisible()
+    expect(screen.getByText('Connection', { exact: true })).toBeVisible()
     expect(
-      screen.getByRole('heading', { name: 'Connect ChatGPT' }),
+      screen.getByRole('button', { name: 'Connection settings' }),
     ).toBeVisible()
-    expect(screen.getByText('Connection readiness')).toBeVisible()
-    expect(screen.getByText('Managed roots')).toBeVisible()
-    expect(screen.getByText('Live control plane')).toBeVisible()
-    expect(
-      screen.getByRole('button', { name: /1 Choose control access/ }),
-    ).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByText('Advanced tools')).toBeVisible()
   })
 })
