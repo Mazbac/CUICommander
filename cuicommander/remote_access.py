@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from .action_gateway import GATEWAY
+from .audit import record_activity
 from .local_admin import is_local_admin_request
 from .security import internal_state_directory, public_base_url, set_public_base_url
 
@@ -385,6 +386,10 @@ async def enable_tailscale_remote_access() -> dict[str, Any]:
         raise
 
     _LAST_ERROR = ""
+    record_activity(
+        "remote.enable",
+        {"provider": "tailscale", "funnelPort": funnel_port, "status": "active"},
+    )
     return await asyncio.to_thread(_status_payload)
 
 
@@ -432,6 +437,10 @@ async def disable_tailscale_remote_access() -> dict[str, Any]:
         }
     )
     _LAST_ERROR = ""
+    record_activity(
+        "remote.disable",
+        {"provider": "tailscale", "funnelPort": funnel_port, "status": "disabled"},
+    )
     return await asyncio.to_thread(_status_payload)
 
 

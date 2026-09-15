@@ -22,23 +22,23 @@ Implemented and verified:
 - live root, node, and HTTP-route discovery;
 - generic file/directory inspect, create, update, move, and delete with stale fingerprints and root/symlink containment;
 - background HTTP(S) downloads into any discovered root with progress, cancellation, checksum verification, retry, atomic finalization, cleanup, and SSRF protections;
-- bounded CUICommander jobs plus one generic `executeComfyUI` operation for live discovered ComfyUI/custom-node routes;
+- durable CUICommander jobs plus one generic `executeComfyUI` operation for live discovered ComfyUI/custom-node routes;
+- bounded redacted activity history for consequential mutations, remote-access changes, and native execution;
 - real runtime acceptance for CRUD, downloads, native prompt/history/queue execution, and an existing custom-node route without an adapter;
-- an embedded React/Mantine console served at `/cuicommander/` by the same ComfyUI extension;
+- an embedded React/Mantine console served at `/cuicommander/` with Overview, Resources, Transfers & Jobs, Workflows, Runtime, and Activity surfaces;
 - a localhost-only Custom GPT setup wizard for access level, generated GPT instructions, Action schema URL, Bearer key, and key rotation;
 - a free Remote access flow that detects Tailscale, preserves existing Serve/Funnel mappings, and exposes only an isolated CUICommander Action gateway rather than raw ComfyUI;
 - local admin operations excluded from OpenAPI and protected by loopback/same-origin checks; secrets remain outside the repository and production bundle;
 - repository-wide Python, TypeScript, unit, browser accessibility, E2E, visual-regression, Action-gateway isolation, and live Tailscale round-trip verification.
   Because Execute delegates to the running ComfyUI HTTP surface, native `/prompt`, queue/job/history endpoints, and routes added later by custom nodes remain reachable without a CUICommander adapter.
 
-Next before a public MVP claim:
+Remaining before a public MVP claim:
 
-- verify the generated Tailscale HTTPS endpoint end-to-end from an actual Custom GPT Action, including current support for the available Funnel port;
-- finish first-run Tailscale onboarding for users who do not already have the client installed and connected;
-- add operator UI for Resources, Downloads/Jobs, and Runtime diagnostics;
-- add higher-level workflow create/read/update/save/test flows on top of live node/model discovery;
-- verify a genuinely large model transfer into a dynamically registered model root;
-- add durable recovery semantics where restart-survival materially improves safety.
+- verify the generated public HTTPS endpoint end-to-end from an actual Custom GPT Action;
+- verify a genuinely large public model transfer into a dynamically registered model root if exhaustive transfer acceptance is required;
+- claim/configure the Comfy Registry publisher and repository publishing secret, then publish the first Manager/Registry release.
+
+The repository already contains Comfy Registry package metadata and a manual publish workflow. The declared publisher must be claimed/configured by the repository owner before that workflow can publish.
 
 ## Development
 

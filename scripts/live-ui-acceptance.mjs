@@ -74,6 +74,21 @@ try {
     if (!localKey)
       throw new Error('Local setup did not provide an Action access key.')
   }
+
+  for (const [link, heading] of [
+    ['Resources', 'Resources'],
+    ['Transfers & jobs', 'Transfers & jobs'],
+    ['Workflows', 'Workflows'],
+    ['Runtime', 'Runtime'],
+    ['Activity', 'Activity'],
+  ]) {
+    await page.getByRole('link', { name: link, exact: true }).click()
+    await page
+      .getByRole('heading', { name: heading, exact: true })
+      .waitFor({ timeout: 10_000 })
+  }
+
+  await page.getByRole('link', { name: 'Overview', exact: true }).click()
   await page.reload({ waitUntil: 'networkidle' })
   await connectIfNeeded(page)
 

@@ -63,3 +63,7 @@ Credential reveal/rotation, access-level changes, and public-endpoint setup are 
 CUICommander must never require exposing raw ComfyUI to the public internet. Remote transports terminate at a loopback-only Action gateway whose routable surface is derived from the compact Action OpenAPI contract; local setup/admin and unrelated ComfyUI routes remain unreachable through it.
 
 The first built-in zero-cost transport is Tailscale Funnel because it provides public HTTPS without router port forwarding or a paid domain. CUICommander must inspect and preserve pre-existing Tailscale Serve/Funnel configuration, select only an unused allowed Funnel port, and never use reset as part of normal setup or teardown. Manual HTTPS origins and future transport providers remain valid alternatives without changing the Action contract.
+
+## 2026-09-14 — D015: Operator UI composes generic primitives
+
+Resources, Transfers & Jobs, Workflows, Runtime, and Activity are human-facing operational surfaces over the same generic control planes used by Actions. Workflow UI may provide JSON editing, fingerprint-safe persistence, and queue controls, but it must not introduce model-family or custom-node-suite backend adapters. Durable jobs and redacted activity are CUICommander-owned operational state; they may improve recovery and auditability without becoming a second scheduler or workflow engine.

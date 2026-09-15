@@ -166,6 +166,20 @@ def _advanced_paths(root: dict[str, Any], path: dict[str, Any], ok: dict[str, An
                 "responses": {"202": {"description": "Download job accepted"}},
             }
         },
+        "/cuicommander/v1/activity": {
+            "get": {
+                "operationId": "listCUICommanderActivity",
+                "summary": "List recent CUICommander mutation activity",
+                "parameters": [
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "schema": {"type": "integer", "minimum": 1, "maximum": 500},
+                    }
+                ],
+                "responses": ok,
+            }
+        },
         "/cuicommander/v1/jobs": {
             "get": {
                 "operationId": "listCUICommanderJobs",

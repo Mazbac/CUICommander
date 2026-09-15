@@ -43,10 +43,17 @@ def discover_roots() -> list[dict[str, Any]]:
     if isinstance(models_dir, str) and models_dir:
         roots.append(_root_record("models", "Models", models_dir, "core"))
 
+    used_ids = {item["id"] for item in roots}
     for folder_name, definition in folder_paths.folder_names_and_paths.items():
         paths = definition[0] if isinstance(definition, tuple) and definition else []
         for index, folder_path in enumerate(paths):
-            root_id = f"registered.{_safe_id(str(folder_name))}.{index}"
+            base_id = f"registered.{_safe_id(str(folder_name))}.{index}"
+            root_id = base_id
+            suffix = 2
+            while root_id in used_ids:
+                root_id = f"{base_id}.{suffix}"
+                suffix += 1
+            used_ids.add(root_id)
             label = f"{folder_name} [{index + 1}]"
             roots.append(_root_record(root_id, label, str(folder_path), "folder_paths"))
 

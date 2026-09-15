@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import {
   ControlPlaneRequestError,
+  apiJson,
   developmentControlPlane,
   loadControlPlane,
   type ControlPlaneSnapshot,
@@ -270,6 +271,16 @@ export function useControlPlane() {
     }
   }, [development, handleFailure])
 
+  const request = useCallback(
+    async <T>(input: string, init?: RequestInit): Promise<T> => {
+      const credential =
+        localSetup?.accessKey ?? sessionStorage.getItem(TOKEN_KEY) ?? ''
+      if (!credential) throw new Error('CUICommander is not authenticated.')
+      return apiJson<T>(input, credential, init)
+    },
+    [localSetup],
+  )
+
   return {
     snapshot,
     localSetup,
@@ -287,6 +298,8 @@ export function useControlPlane() {
     refreshRemoteAccess,
     enableRemoteAccess,
     disableRemoteAccess,
+    request,
+    development,
     schemaUrl:
       localSetup?.gpt.schemaUrl ??
       snapshot?.schemaUrl ??

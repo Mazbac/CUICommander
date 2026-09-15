@@ -165,8 +165,24 @@ export function CustomGptSetup({
                 </Alert>
               ) : !remote.installed ? (
                 <Alert color="yellow" title="Tailscale is not installed">
-                  Install the free Tailscale client, sign in once, then choose
-                  Refresh detection. CUICommander will handle the Funnel setup.
+                  <Stack gap="xs">
+                    <Text size="sm">
+                      Install the free Tailscale client, sign in once, then
+                      choose Refresh detection. CUICommander will handle the
+                      Funnel setup.
+                    </Text>
+                    <Button
+                      component="a"
+                      href="https://tailscale.com/download"
+                      target="_blank"
+                      rel="noreferrer"
+                      variant="default"
+                      size="compact-sm"
+                      w="fit-content"
+                    >
+                      Open Tailscale download
+                    </Button>
+                  </Stack>
                 </Alert>
               ) : !remote.connected ? (
                 <Alert color="yellow" title="Connect Tailscale first">

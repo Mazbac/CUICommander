@@ -30,8 +30,11 @@ const accessTone = {
   full: 'dark',
 } as const
 
-export function OverviewPage() {
-  const controlPlane = useControlPlane()
+type OverviewPageProps = {
+  controlPlane: ReturnType<typeof useControlPlane>
+}
+
+export function OverviewPage({ controlPlane }: OverviewPageProps) {
   const [credential, setCredential] = useState('')
   const snapshot = controlPlane.snapshot
   const submitConnection = (event: FormEvent<HTMLFormElement>) => {

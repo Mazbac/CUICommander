@@ -5,9 +5,10 @@ from typing import Any
 
 from aiohttp import web
 
+from .audit import list_activity, record_activity
 from .discovery import discover
 from .downloads import start_download
-from .jobs import cancel_job, get_job, list_jobs
+from .jobs import cancel_job, get_job, list_jobs, restore_jobs
 from .local_admin import (
     is_local_admin_request,
     local_setup_payload,
@@ -129,7 +130,9 @@ async def local_setup_update_handler(request: web.Request) -> web.Response:
     if denied:
         return denied
     try:
-        return _no_store_json(update_local_setup(request, await _json(request)))
+        result = update_local_setup(request, await _json(request))
+        record_activity("setup.update", {"accessLevel": result.get("accessLevel")})
+        return _no_store_json(result)
     except Exception as error:
         return _exception_response(error)
 
@@ -140,7 +143,9 @@ async def local_rotate_handler(request: web.Request) -> web.Response:
         return denied
     try:
         body = await _json(request)
-        return _no_store_json(rotate_local_access_key(request, body.get("confirmed") is True))
+        result = rotate_local_access_key(request, body.get("confirmed") is True)
+        record_activity("credential.rotate")
+        return _no_store_json(result)
     except Exception as error:
         return _exception_response(error)
 
@@ -179,7 +184,10 @@ async def create_handler(request: web.Request) -> web.Response:
     if denied:
         return denied
     try:
-        return web.json_response(create_resource(await _json(request)))
+        body = await _json(request)
+        result = create_resource(body)
+        record_activity("resource.create", body)
+        return web.json_response(result)
     except Exception as error:
         return _exception_response(error)
 
@@ -189,7 +197,10 @@ async def update_handler(request: web.Request) -> web.Response:
     if denied:
         return denied
     try:
-        return web.json_response(update_resource(await _json(request)))
+        body = await _json(request)
+        result = update_resource(body)
+        record_activity("resource.update", body)
+        return web.json_response(result)
     except Exception as error:
         return _exception_response(error)
 
@@ -199,7 +210,10 @@ async def move_handler(request: web.Request) -> web.Response:
     if denied:
         return denied
     try:
-        return web.json_response(move_resource(await _json(request)))
+        body = await _json(request)
+        result = move_resource(body)
+        record_activity("resource.move", body)
+        return web.json_response(result)
     except Exception as error:
         return _exception_response(error)
 
@@ -212,7 +226,9 @@ async def delete_handler(request: web.Request) -> web.Response:
         body = await _json(request)
         if body.get("confirmed") is not True:
             return _error(400, "confirmation_required", "Delete requires clear user intent.")
-        return web.json_response(delete_resource(body))
+        result = delete_resource(body)
+        record_activity("resource.delete", body)
+        return web.json_response(result)
     except Exception as error:
         return _exception_response(error)
 
@@ -222,7 +238,10 @@ async def download_handler(request: web.Request) -> web.Response:
     if denied:
         return denied
     try:
-        return web.json_response(start_download(await _json(request)), status=202)
+        body = await _json(request)
+        result = start_download(body)
+        record_activity("download.start", {**body, "jobId": result.get("id")})
+        return web.json_response(result, status=202)
     except Exception as error:
         return _exception_response(error)
 
@@ -234,6 +253,17 @@ async def jobs_handler(request: web.Request) -> web.Response:
     try:
         limit = int(request.rel_url.query.get("limit", 50))
         return web.json_response({"items": list_jobs(limit)})
+    except Exception as error:
+        return _exception_response(error)
+
+
+async def activity_handler(request: web.Request) -> web.Response:
+    denied = _authorized(request)
+    if denied:
+        return denied
+    try:
+        limit = int(request.rel_url.query.get("limit", 100))
+        return web.json_response({"items": list_activity(limit)})
     except Exception as error:
         return _exception_response(error)
 
@@ -256,7 +286,10 @@ async def cancel_job_handler(request: web.Request) -> web.Response:
         body = await _json(request)
         if body.get("confirmed") is not True:
             return _error(400, "confirmation_required", "Cancelling a job requires clear user intent.")
-        return web.json_response(cancel_job(str(request.match_info.get("job_id", ""))))
+        job_id = str(request.match_info.get("job_id", ""))
+        result = cancel_job(job_id)
+        record_activity("job.cancel", {"jobId": job_id, "status": result.get("status")})
+        return web.json_response(result)
     except Exception as error:
         return _exception_response(error)
 
@@ -266,7 +299,10 @@ async def execute_handler(request: web.Request) -> web.Response:
     if denied:
         return denied
     try:
-        return web.json_response(await execute_native(await _json(request)))
+        body = await _json(request)
+        result = await execute_native(body)
+        record_activity("runtime.execute", {**body, "status": result.get("status")})
+        return web.json_response(result)
     except Exception as error:
         return _exception_response(error)
 
@@ -278,6 +314,7 @@ def register_routes() -> None:
 
     from server import PromptServer
 
+    restore_jobs()
     routes = PromptServer.instance.routes
     routes.get("/cuicommander/v1/openapi")(openapi_handler)
     routes.get("/cuicommander/v1/manifest")(manifest_handler)
@@ -292,6 +329,7 @@ def register_routes() -> None:
     routes.post("/cuicommander/v1/resources/delete")(delete_handler)
     routes.post("/cuicommander/v1/downloads")(download_handler)
     routes.get("/cuicommander/v1/jobs")(jobs_handler)
+    routes.get("/cuicommander/v1/activity")(activity_handler)
     routes.get("/cuicommander/v1/jobs/{job_id}")(job_handler)
     routes.post("/cuicommander/v1/jobs/{job_id}/cancel")(cancel_job_handler)
     routes.post("/cuicommander/v1/execute")(execute_handler)

@@ -13,10 +13,10 @@ CUICommander is a ComfyUI custom-node/server extension with a small React operat
 
 The invariant is: if the running ComfyUI process owns, registers, exposes, or can legitimately operate a ComfyUI subsystem, CUICommander must retain a vendor-independent route to it.
 
-1. **Discovery plane** â€” live nodes, route inventory, registered model/path roots, system state, and CUICommander capability manifest.
-2. **Structured resource plane** â€” generic filesystem CRUD, background downloads, and bounded job records.
-3. **Native execution plane** â€” one generic executor for routes that exist in the live ComfyUI/custom-node aiohttp router.
-4. **Full-control fallback plane** â€” bounded ComfyUI-scoped primitives only for proven gaps that discovery, CRUD/transfers, and native routes cannot express.
+1. **Discovery plane** — live nodes, route inventory, registered model/path roots, system state, and CUICommander capability manifest.
+2. **Structured resource plane** — generic filesystem CRUD, background downloads, durable bounded job records, and redacted mutation activity.
+3. **Native execution plane** — one generic executor for routes that exist in the live ComfyUI/custom-node aiohttp router.
+4. **Full-control fallback plane** — bounded ComfyUI-scoped primitives only for proven gaps that discovery, CRUD/transfers, and native routes cannot express.
 
 There is no required provider adapter layer. Node packs, model families, and software installed later must remain reachable through the same generic planes.
 
@@ -28,6 +28,8 @@ There is no required provider adapter layer. Node packs, model families, and sof
 - Existing-resource mutations require fresh fingerprints. Small files use full SHA-256, large files use bounded content sampling plus metadata, and directories use tree metadata.
 - Large model/assets ingress is one generic background download primitive, not checkpoint/LoRA/provider installers.
 - Downloads stream into partial files, report bounded progress, support cancellation and optional SHA-256 verification, retry bounded transient failures, and finalize atomically.
+- Download jobs persist in bounded CUICommander state. If ComfyUI restarts mid-job, the restored record becomes `interrupted` rather than pretending work is still running.
+- Consequential CUICommander mutations append a bounded activity record containing only safe operation metadata; credentials, authorization headers, and resource contents are excluded.
 - Download URLs are constrained to public HTTP(S) destinations; DNS and redirects are revalidated and cross-origin redirects do not retain Authorization.
 
 ## Native execution boundary
@@ -38,7 +40,7 @@ This means upstream changes and newly installed custom-node routes remain reacha
 
 ## Machine control language
 
-The stable model is **Discover/Inspect â†’ Create/Read/Update/Delete â†’ Execute**. Model installation is Create/download into a discovered root. Workflow submission and queue/job control are Execute against discovered native routes. Custom-node management is ordinary filesystem/runtime control, not a vendor action.
+The stable model is **Discover/Inspect → Create/Read/Update/Delete → Execute**. Model installation is Create/download into a discovered root. Workflow submission and queue/job control are Execute against discovered native routes. Custom-node management is ordinary filesystem/runtime control, not a vendor action.
 
 ## External API and authentication
 

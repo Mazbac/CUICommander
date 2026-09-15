@@ -1,7 +1,7 @@
 {
   "name": "cuicommander",
   "private": true,
-  "version": "0.4.0",
+  "version": "0.5.0",
   "type": "module",
   "description": "Universal ChatGPT control plane for ComfyUI",
   "engines": {
@@ -21,10 +21,11 @@
     "test:visual": "playwright test tests/visual",
     "ui:check": "node scripts/ui-check.mjs",
     "doctor": "node scripts/doctor.mjs",
-    "verify": "npm run format:check && npm run lint && npm run typecheck && npm run ui:check && npm run test:python && npm run test && npm run build",
+    "verify": "npm run format:check && npm run lint && npm run typecheck && npm run ui:check && npm run package:check && npm run test:python && npm run test && npm run build",
     "verify:full": "npm run verify && npm run test:e2e && npm run test:visual",
     "test:visual:update": "playwright test tests/visual --update-snapshots",
-    "test:python": "node scripts/python-check.mjs"
+    "test:python": "node scripts/python-check.mjs",
+    "package:check": "node scripts/package-check.mjs"
   },
   "dependencies": {
     "@mantine/core": "^9.6.1",

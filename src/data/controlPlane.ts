@@ -58,7 +58,7 @@ const capabilities: ControlPlaneSnapshot['capabilities'] = [
 ]
 
 export const developmentControlPlane: ControlPlaneSnapshot = {
-  version: '0.4.0-dev',
+  version: '0.5.0-dev',
   comfyVersion: 'live runtime required',
   status: 'needs-runtime',
   accessLevel: 'inspect',
@@ -104,7 +104,7 @@ type RootResponse = {
   exists: boolean
 }
 
-async function apiJson<T>(
+export async function apiJson<T>(
   input: string,
   token: string,
   init?: RequestInit,

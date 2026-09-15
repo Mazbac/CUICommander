@@ -1,0 +1,15 @@
+[project]
+name = "cuicommander"
+version = "0.5.0"
+description = "Universal authenticated ChatGPT control plane for ComfyUI"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.urls]
+Repository = "https://github.com/Mazbac/CUICommander"
+"Bug Tracker" = "https://github.com/Mazbac/CUICommander/issues"
+
+[tool.comfy]
+PublisherId = "mazbac"
+DisplayName = "CUICommander"
+includes = ["web/console"]
