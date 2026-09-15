@@ -30,7 +30,7 @@
 
 ## Verification
 
-- `npm run verify:full` passes with 57 Python backend tests, 6 frontend unit tests, formatting, lint, TypeScript, UI conformance, package metadata, production build, 3 Chromium accessibility/E2E tests, and 5 reviewed visual-regression cases.
+- `npm run verify:full` passes with 60 Python backend tests, 6 frontend unit tests, formatting, lint, TypeScript, UI conformance, package metadata, production build, 3 Chromium accessibility/E2E tests, and 5 reviewed visual-regression cases.
 - Chromium accessibility/E2E walks every operator page and currently passes with zero axe violations.
 - Desktop, mobile, narrow, and dark-mode overview visual regression currently passes.
 - Action-gateway isolation and a fresh 0.5 Tailscale Funnel round-trip prove authenticated Action routes are public while raw ComfyUI/local admin remain unreachable; the existing machine Serve/Funnel mappings are unchanged before/after.
@@ -40,12 +40,12 @@
 - On 2026-09-15 an isolated real ComfyUI 0.35.1 instance reconstructed a 188,908-byte workflow in two authenticated resource chunks and parsed it as JSON. The same live pass verified repeated append patches plus complete readback/cleanup and completed a tiny native prompt. The sampled `/object_info` response fit below the 2 MiB inline limit, so oversized native-response continuation remains unit-tested rather than live-triggered in that pass.
 - Later on 2026-09-15 the owner's normal 8188 runtime was deliberately restarted onto the current release-candidate code with an empty queue. Through the public Tailscale Action endpoint, a current 290,301-byte workflow was reconstructed and JSON-validated in three chunks; a second public mutating pass verified CRUD, repeated chunk patches/readback/cleanup, native `/system_stats`, and a successful tiny prompt plus cleanup.
 - The isolated Tailscale Action node now has an enabled highest-privilege at-logon Scheduled Task. A controlled handoff stopped only the CUICommander-owned userspace daemon, started it through that task, verified the Action node online, restored the existing Funnel mapping, and repeated the public large-resource acceptance successfully.
+- Final Custom GPT UI acceptance passed on 2026-09-15 after refreshing the pasted Action schema/instructions: the GPT read the current 290,301-byte workflow completely through `readComfyUIResource`, followed continuation to `eof=true` in five successful Action chunks, parsed the full JSON, and reported its top-level keys without modifying the file. This closes the large-resource GPT UI acceptance blocker.
 
 ## Remaining external acceptance / release blockers
 
-1. Refresh the Custom GPT's pasted Action schema/instructions so it knows the continuation operations, then repeat the large-resource read through the actual GPT UI.
-2. Verify one genuinely large public model transfer into a dynamically registered model root if desired before calling transfer acceptance exhaustive.
-3. Claim/configure the Comfy Registry publisher and publishing secret before public Manager/Registry release.
+1. Verify one genuinely large public model transfer into a dynamically registered model root if desired before calling transfer acceptance exhaustive.
+2. Claim/configure the Comfy Registry publisher and publishing secret before public Manager/Registry release.
 
 ## Runtime note
 
