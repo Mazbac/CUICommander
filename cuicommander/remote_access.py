@@ -317,8 +317,10 @@ def _begin_action_node_login() -> str:
 def prepare_tailscale_action_node() -> dict[str, Any]:
     global _ACTION_NODE_LOGIN_URL
     _install_action_node_task()
-    _start_action_node_task()
-    snapshot = _wait_for_action_node()
+    snapshot = _try_action_node_snapshot()
+    if snapshot is None:
+        _start_action_node_task()
+        snapshot = _wait_for_action_node()
     if snapshot is None:
         raise RuntimeError("The isolated Tailscale Action node did not start after administrator approval.")
     if snapshot.get("connected"):

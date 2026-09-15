@@ -283,6 +283,7 @@ class RemoteAccessLifecycleTests(unittest.IsolatedAsyncioTestCase):
     def test_prepare_action_node_starts_login_when_needed(self) -> None:
         with (
             patch.object(remote_access, "_install_action_node_task") as install,
+            patch.object(remote_access, "_try_action_node_snapshot", return_value=None),
             patch.object(remote_access, "_start_action_node_task") as start_task,
             patch.object(remote_access, "_wait_for_action_node", return_value={"connected": False}),
             patch.object(remote_access, "_begin_action_node_login", return_value="https://login.tailscale.com/a/test") as begin_login,
@@ -294,6 +295,23 @@ class RemoteAccessLifecycleTests(unittest.IsolatedAsyncioTestCase):
         install.assert_called_once_with()
         start_task.assert_called_once_with()
         begin_login.assert_called_once_with()
+
+    def test_prepare_action_node_reuses_running_daemon_without_duplicate_task_start(self) -> None:
+        with (
+            patch.object(remote_access, "_install_action_node_task") as install,
+            patch.object(remote_access, "_try_action_node_snapshot", return_value={"connected": True}),
+            patch.object(remote_access, "_start_action_node_task") as start_task,
+            patch.object(remote_access, "_wait_for_action_node") as wait_for_node,
+            patch.object(remote_access, "_begin_action_node_login") as begin_login,
+            patch.object(remote_access, "_status_payload", return_value={"actionNodeRunning": True}),
+        ):
+            result = remote_access.prepare_tailscale_action_node()
+
+        self.assertEqual(result, {"actionNodeRunning": True})
+        install.assert_called_once_with()
+        start_task.assert_not_called()
+        wait_for_node.assert_not_called()
+        begin_login.assert_not_called()
 
     async def test_disable_restores_previous_manual_https_origin(self) -> None:
         state = {
