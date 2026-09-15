@@ -10,12 +10,12 @@ type SectionProps = {
 export function Section({ title, description, children }: SectionProps) {
   return (
     <Stack gap="md">
-      <Stack gap="xs">
+      <Stack gap={4} maw="52rem">
         <Title order={2} size="h4">
           {title}
         </Title>
         {description ? (
-          <Text c="dimmed" size="sm">
+          <Text c="dimmed" size="sm" lh={1.55}>
             {description}
           </Text>
         ) : null}

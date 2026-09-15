@@ -7,6 +7,7 @@ from urllib.parse import urlsplit
 from .gpt_setup import setup_profile
 from .security import (
     access_level,
+    custom_gpt_compatible_origin,
     environment_overrides,
     public_base_url,
     rotate_token,
@@ -73,8 +74,10 @@ def local_setup_payload(request: Any) -> dict[str, Any]:
         "environmentOverrides": environment_overrides(),
         "readiness": {
             "httpsEndpoint": bool(configured_public_url),
+            "customGptOrigin": custom_gpt_compatible_origin(configured_public_url),
             "fullControl": current_access == "full",
-            "readyForCustomGPT": bool(configured_public_url) and current_access == "full",
+            "readyForCustomGPT": custom_gpt_compatible_origin(configured_public_url)
+            and current_access == "full",
         },
         "gpt": profile,
     }

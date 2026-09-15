@@ -19,6 +19,7 @@ import {
   disableTailscaleRemoteAccess,
   enableTailscaleRemoteAccess,
   loadRemoteAccess,
+  prepareTailscaleActionNode,
   type RemoteAccessState,
 } from '../data/remoteAccess'
 
@@ -179,6 +180,23 @@ export function useControlPlane() {
     }
   }, [development])
 
+  const prepareRemoteAccess = useCallback(async () => {
+    if (development) return
+    setRemoteBusy(true)
+    setRemoteError(null)
+    try {
+      setRemoteAccess(await prepareTailscaleActionNode())
+    } catch (requestError) {
+      setRemoteError(
+        requestError instanceof Error
+          ? requestError.message
+          : 'Could not prepare the isolated Custom GPT endpoint.',
+      )
+    } finally {
+      setRemoteBusy(false)
+    }
+  }, [development])
+
   const enableRemoteAccess = useCallback(async () => {
     if (development) return
     setRemoteBusy(true)
@@ -296,6 +314,7 @@ export function useControlPlane() {
     applyLocalSetup,
     rotateAccessKey,
     refreshRemoteAccess,
+    prepareRemoteAccess,
     enableRemoteAccess,
     disableRemoteAccess,
     request,

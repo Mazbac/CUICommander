@@ -60,7 +60,25 @@ def _normalize_public_base_url(value: Any) -> str:
         raise ValueError("Public endpoint may not contain credentials, query, or fragment.")
     if parsed.path not in {"", "/"}:
         raise ValueError("Public endpoint must be an origin without a path.")
-    return f"https://{parsed.netloc}".rstrip("/")
+    host = parsed.hostname
+    if not host:
+        raise ValueError("Public endpoint must include a hostname.")
+    port = parsed.port
+    if ":" in host and not host.startswith("["):
+        host = f"[{host}]"
+    authority = host if port in {None, 443} else f"{host}:{port}"
+    return f"https://{authority}"
+
+
+def custom_gpt_compatible_origin(value: Any) -> bool:
+    try:
+        normalized = _normalize_public_base_url(value)
+    except ValueError:
+        return False
+    if not normalized:
+        return False
+    parsed = urlsplit(normalized)
+    return parsed.scheme == "https" and parsed.port in {None, 443}
 
 
 def ensure_settings() -> dict[str, Any]:

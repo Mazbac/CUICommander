@@ -3,9 +3,11 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 import shutil
 import socket
 import subprocess
+import time
 from pathlib import Path
 from typing import Any
 
@@ -16,8 +18,11 @@ from .security import internal_state_directory, public_base_url, set_public_base
 
 _ALLOWED_FUNNEL_PORTS = (443, 8443, 10000)
 _GATEWAY_PORTS = tuple(range(8766, 8800))
+_ACTION_NODE_SOCKET = r"\\.\pipe\ProtectedPrefix\Administrators\Tailscale\CUICommanderAction"
+_ACTION_NODE_TASK_NAME = "CUICommander Action Tailscale"
 _REGISTERED = False
 _LAST_ERROR = ""
+_ACTION_NODE_LOGIN_URL = ""
 
 
 def _state_path() -> Path:
@@ -29,7 +34,7 @@ def _load_state() -> dict[str, Any]:
     if not path.exists():
         return {}
     try:
-        value = json.loads(path.read_text(encoding="utf-8"))
+        value = json.loads(path.read_text(encoding="utf-8-sig"))
     except (OSError, ValueError):
         return {}
     return value if isinstance(value, dict) else {}
@@ -58,13 +63,21 @@ def _tailscale_executable() -> str | None:
     return None
 
 
-def _run_tailscale(arguments: list[str], timeout: int = 20) -> subprocess.CompletedProcess[str]:
+def _run_tailscale(
+    arguments: list[str],
+    timeout: int = 20,
+    socket_path: str | None = None,
+) -> subprocess.CompletedProcess[str]:
     executable = _tailscale_executable()
     if not executable:
         raise FileNotFoundError("Tailscale is not installed.")
     flags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
+    command = [executable]
+    if socket_path:
+        command.append(f"--socket={socket_path}")
+    command.extend(arguments)
     return subprocess.run(
-        [executable, *arguments],
+        command,
         capture_output=True,
         text=True,
         timeout=timeout,
@@ -73,8 +86,10 @@ def _run_tailscale(arguments: list[str], timeout: int = 20) -> subprocess.Comple
     )
 
 
-def _json_command(arguments: list[str]) -> dict[str, Any]:
-    result = _run_tailscale(arguments)
+def _json_command(
+    arguments: list[str], socket_path: str | None = None
+) -> dict[str, Any]:
+    result = _run_tailscale(arguments, socket_path=socket_path)
     if result.returncode != 0:
         message = (result.stderr or result.stdout or "Tailscale command failed.").strip()
         raise RuntimeError(message[:1000])
@@ -87,7 +102,7 @@ def _json_command(arguments: list[str]) -> dict[str, Any]:
     return value
 
 
-def _tailscale_snapshot() -> dict[str, Any]:
+def _tailscale_snapshot(socket_path: str | None = None) -> dict[str, Any]:
     executable = _tailscale_executable()
     if not executable:
         return {
@@ -97,10 +112,10 @@ def _tailscale_snapshot() -> dict[str, Any]:
             "dnsName": "",
             "funnel": {},
         }
-    version_result = _run_tailscale(["version"])
+    version_result = _run_tailscale(["version"], socket_path=socket_path)
     version = (version_result.stdout.splitlines() or [""])[0].strip()
-    status = _json_command(["status", "--json"])
-    funnel = _json_command(["funnel", "status", "--json"])
+    status = _json_command(["status", "--json"], socket_path=socket_path)
+    funnel = _json_command(["funnel", "status", "--json"], socket_path=socket_path)
     self_state = status.get("Self") if isinstance(status.get("Self"), dict) else {}
     dns_name = str(self_state.get("DNSName", "")).rstrip(".")
     connected = (
@@ -116,6 +131,201 @@ def _tailscale_snapshot() -> dict[str, Any]:
         "funnel": funnel,
     }
 
+
+
+
+def _state_socket(state: dict[str, Any]) -> str | None:
+    if state.get("mode") == "action-node":
+        return _ACTION_NODE_SOCKET
+    return None
+
+
+def _tailscaled_executable() -> str | None:
+    cli = _tailscale_executable()
+    if not cli:
+        return None
+    candidate = Path(cli).with_name("tailscaled.exe" if os.name == "nt" else "tailscaled")
+    return str(candidate) if candidate.exists() else None
+
+
+def _action_node_supported() -> bool:
+    return os.name == "nt" and _tailscaled_executable() is not None
+
+
+def _action_node_state_dir() -> Path:
+    return internal_state_directory() / "tailscale-action-node"
+
+
+def _action_node_hostname() -> str:
+    base = re.sub(r"[^a-z0-9-]+", "-", socket.gethostname().lower()).strip("-")
+    if not base:
+        base = "host"
+    return f"cuicommander-{base}"[:63].rstrip("-")
+
+
+def _try_action_node_snapshot() -> dict[str, Any] | None:
+    if not _action_node_supported():
+        return None
+    try:
+        return _tailscale_snapshot(_ACTION_NODE_SOCKET)
+    except Exception:
+        return None
+
+
+def _action_node_summary() -> dict[str, Any]:
+    snapshot = _try_action_node_snapshot()
+    if snapshot is None:
+        return {
+            "supported": _action_node_supported(),
+            "running": False,
+            "connected": False,
+            "dnsName": "",
+        }
+    return {
+        "supported": True,
+        "running": True,
+        "connected": bool(snapshot.get("connected")),
+        "dnsName": str(snapshot.get("dnsName", "")),
+    }
+
+
+def _powershell_literal(value: str) -> str:
+    return "'" + value.replace("'", "''") + "'"
+
+
+def _action_node_task_exists() -> bool:
+    if os.name != "nt":
+        return False
+    result = subprocess.run(
+        ["schtasks.exe", "/Query", "/TN", _ACTION_NODE_TASK_NAME],
+        capture_output=True,
+        text=True,
+        timeout=10,
+        creationflags=subprocess.CREATE_NO_WINDOW,
+        check=False,
+    )
+    return result.returncode == 0
+
+
+def _write_action_node_task_script() -> Path:
+    tailscaled = _tailscaled_executable()
+    if not tailscaled:
+        raise FileNotFoundError("Tailscale daemon executable was not found.")
+    state_dir = _action_node_state_dir()
+    state_dir.mkdir(parents=True, exist_ok=True)
+    script_path = state_dir / "install-action-node-task.ps1"
+    state_file = state_dir / "tailscaled.state"
+    lines = [
+        '$ErrorActionPreference = "Stop"',
+        f'$taskName = {_powershell_literal(_ACTION_NODE_TASK_NAME)}',
+        f'$tailscaled = {_powershell_literal(tailscaled)}',
+        f'$stateDir = {_powershell_literal(str(state_dir))}',
+        f'$stateFile = {_powershell_literal(str(state_file))}',
+        f'$socketPath = {_powershell_literal(_ACTION_NODE_SOCKET)}',
+        '$userId = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name',
+        "$argumentLine = '--tun=userspace-networking --port=0 --socket=\"' + $socketPath + '\" --statedir=\"' + $stateDir + '\" --state=\"' + $stateFile + '\" --no-logs-no-support'",
+        '$action = New-ScheduledTaskAction -Execute $tailscaled -Argument $argumentLine',
+        '$trigger = New-ScheduledTaskTrigger -AtLogOn -User $userId',
+        '$principal = New-ScheduledTaskPrincipal -UserId $userId -LogonType Interactive -RunLevel Highest',
+        '$settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -RestartCount 10 -RestartInterval (New-TimeSpan -Minutes 1) -ExecutionTimeLimit ([TimeSpan]::Zero)',
+        'Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Force | Out-Null',
+        "$existing = Get-CimInstance Win32_Process -Filter \"Name='tailscaled.exe'\" | Where-Object { $_.CommandLine -and $_.CommandLine.Contains($stateDir) }",
+        'if (-not $existing) { Start-ScheduledTask -TaskName $taskName }',
+    ]
+    script_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return script_path
+
+
+def _install_action_node_task() -> None:
+    if not _action_node_supported():
+        raise RuntimeError("An isolated Tailscale Action node is currently supported on Windows only.")
+    if _action_node_task_exists():
+        return
+    script_path = _write_action_node_task_script()
+    powershell = shutil.which("powershell.exe") or shutil.which("powershell")
+    if not powershell:
+        raise RuntimeError("Windows PowerShell was not found.")
+    command = (
+        "$ErrorActionPreference='Stop'; "
+        "$p=Start-Process -FilePath 'powershell.exe' "
+        "-ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-File',"
+        f"{_powershell_literal(str(script_path))}) -Verb RunAs -Wait -PassThru; "
+        "exit $p.ExitCode"
+    )
+    result = subprocess.run(
+        [powershell, "-NoProfile", "-NonInteractive", "-Command", command],
+        capture_output=True,
+        text=True,
+        timeout=120,
+        creationflags=subprocess.CREATE_NO_WINDOW,
+        check=False,
+    )
+    if result.returncode != 0:
+        message = (result.stderr or result.stdout or "Administrator approval was cancelled or failed.").strip()
+        raise RuntimeError(message[:1000])
+
+
+def _start_action_node_task() -> None:
+    if os.name != "nt" or not _action_node_task_exists():
+        return
+    subprocess.run(
+        ["schtasks.exe", "/Run", "/TN", _ACTION_NODE_TASK_NAME],
+        capture_output=True,
+        text=True,
+        timeout=10,
+        creationflags=subprocess.CREATE_NO_WINDOW,
+        check=False,
+    )
+
+
+def _wait_for_action_node(timeout_seconds: float = 12.0) -> dict[str, Any] | None:
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() < deadline:
+        snapshot = _try_action_node_snapshot()
+        if snapshot is not None:
+            return snapshot
+        time.sleep(0.4)
+    return None
+
+
+def _begin_action_node_login() -> str:
+    global _ACTION_NODE_LOGIN_URL
+    result = _run_tailscale(
+        [
+            "login",
+            f"--hostname={_action_node_hostname()}",
+            "--accept-dns=false",
+            "--unattended=true",
+            "--timeout=5s",
+        ],
+        timeout=10,
+        socket_path=_ACTION_NODE_SOCKET,
+    )
+    text = "\n".join(part for part in (result.stdout, result.stderr) if part)
+    match = re.search(r"https://login\.tailscale\.com/[^\s]+", text)
+    if match:
+        _ACTION_NODE_LOGIN_URL = match.group(0)
+        return _ACTION_NODE_LOGIN_URL
+    snapshot = _try_action_node_snapshot()
+    if snapshot and snapshot.get("connected"):
+        _ACTION_NODE_LOGIN_URL = ""
+        return ""
+    message = text.strip() or "Tailscale did not return a login URL for the isolated Action node."
+    raise RuntimeError(message[:1000])
+
+
+def prepare_tailscale_action_node() -> dict[str, Any]:
+    global _ACTION_NODE_LOGIN_URL
+    _install_action_node_task()
+    _start_action_node_task()
+    snapshot = _wait_for_action_node()
+    if snapshot is None:
+        raise RuntimeError("The isolated Tailscale Action node did not start after administrator approval.")
+    if snapshot.get("connected"):
+        _ACTION_NODE_LOGIN_URL = ""
+    else:
+        _begin_action_node_login()
+    return _status_payload()
 
 def _occupied_funnel_ports(config: dict[str, Any]) -> set[int]:
     occupied: set[int] = set()
@@ -200,71 +410,117 @@ def _funnel_matches(
 def _status_payload() -> dict[str, Any]:
     global _LAST_ERROR
     state = _load_state()
+    enabled = state.get("provider") == "tailscale" and state.get("enabled") is True
+    mode = str(state.get("mode", "system"))
+    gateway_port = int(state.get("gatewayPort", 0) or 0)
+    funnel_port = int(state.get("funnelPort", 0) or 0)
+    origin = str(state.get("publicBaseUrl", ""))
+    target = _gateway_target(gateway_port) if gateway_port else ""
+
     try:
-        snapshot = _tailscale_snapshot()
-        config = snapshot.get("funnel") if isinstance(snapshot.get("funnel"), dict) else {}
-        occupied = sorted(_occupied_funnel_ports(config))
-        suggested: int | None = None
-        try:
-            suggested = _choose_funnel_port(config)
-        except RuntimeError:
-            pass
-        enabled = state.get("provider") == "tailscale" and state.get("enabled") is True
-        gateway_port = int(state.get("gatewayPort", 0) or 0)
-        funnel_port = int(state.get("funnelPort", 0) or 0)
-        origin = str(state.get("publicBaseUrl", ""))
-        target = _gateway_target(gateway_port) if gateway_port else ""
-        matched = bool(
-            enabled
-            and snapshot["connected"]
-            and funnel_port
-            and target
-            and _funnel_matches(config, snapshot["dnsName"], funnel_port, target)
+        system_snapshot = _tailscale_snapshot()
+        system_config = (
+            system_snapshot.get("funnel")
+            if isinstance(system_snapshot.get("funnel"), dict)
+            else {}
         )
-        if enabled and funnel_port in _ALLOWED_FUNNEL_PORTS:
-            saved_mapping = bool(
-                target
-                and _funnel_matches(config, snapshot["dnsName"], funnel_port, target)
-            )
-            if saved_mapping or funnel_port not in occupied:
-                suggested = funnel_port
-        existing_services = len(config.get("Web", {})) if isinstance(config.get("Web"), dict) else 0
-        return {
-            "provider": "tailscale",
-            "installed": snapshot["installed"],
-            "version": snapshot["version"],
-            "connected": snapshot["connected"],
-            "dnsName": snapshot["dnsName"],
-            "existingServices": existing_services,
-            "occupiedFunnelPorts": occupied,
-            "recommendedFunnelPort": suggested,
-            "configured": enabled,
-            "active": matched and GATEWAY.running,
-            "gatewayRunning": GATEWAY.running,
-            "gatewayPort": gateway_port or None,
-            "funnelPort": funnel_port or None,
-            "publicBaseUrl": origin,
-            "lastError": _LAST_ERROR,
-        }
+        system_occupied = sorted(_occupied_funnel_ports(system_config))
+        system_443_available = 443 not in system_occupied
+        existing_services = (
+            len(system_config.get("Web", {}))
+            if isinstance(system_config.get("Web"), dict)
+            else 0
+        )
     except Exception as error:
         _LAST_ERROR = str(error)
-        return {
-            "provider": "tailscale",
+        system_snapshot = {
             "installed": _tailscale_executable() is not None,
             "version": "",
             "connected": False,
             "dnsName": "",
-            "existingServices": 0,
-            "occupiedFunnelPorts": [],
-            "recommendedFunnelPort": None,
-            "configured": state.get("enabled") is True,
-            "active": False,
-            "gatewayRunning": GATEWAY.running,
-            "gatewayPort": state.get("gatewayPort"),
-            "funnelPort": state.get("funnelPort"),
-            "publicBaseUrl": str(state.get("publicBaseUrl", "")),
-            "lastError": _LAST_ERROR,
+            "funnel": {},
         }
+        system_occupied = []
+        system_443_available = False
+        existing_services = 0
+
+    action_summary = _action_node_summary()
+    action_snapshot = _try_action_node_snapshot()
+    action_config = (
+        action_snapshot.get("funnel")
+        if action_snapshot and isinstance(action_snapshot.get("funnel"), dict)
+        else {}
+    )
+    action_443_available = bool(
+        action_snapshot
+        and action_snapshot.get("connected")
+        and (
+            443 not in _occupied_funnel_ports(action_config)
+            or (
+                mode == "action-node"
+                and enabled
+                and gateway_port
+                and _funnel_matches(
+                    action_config,
+                    str(action_snapshot.get("dnsName", "")),
+                    443,
+                    target,
+                )
+            )
+        )
+    )
+
+    active_snapshot = action_snapshot if mode == "action-node" else system_snapshot
+    if active_snapshot is None:
+        active_snapshot = {
+            "connected": False,
+            "dnsName": "",
+            "funnel": {},
+        }
+    active_config = (
+        active_snapshot.get("funnel")
+        if isinstance(active_snapshot.get("funnel"), dict)
+        else {}
+    )
+    matched = bool(
+        enabled
+        and active_snapshot.get("connected")
+        and funnel_port
+        and target
+        and _funnel_matches(
+            active_config,
+            str(active_snapshot.get("dnsName", "")),
+            funnel_port,
+            target,
+        )
+    )
+    recommended = 443 if (system_443_available or action_443_available) else None
+    active = matched and GATEWAY.running
+    return {
+        "provider": "tailscale",
+        "mode": mode,
+        "installed": bool(system_snapshot.get("installed")),
+        "version": str(system_snapshot.get("version", "")),
+        "connected": bool(system_snapshot.get("connected")),
+        "dnsName": str(system_snapshot.get("dnsName", "")),
+        "existingServices": existing_services,
+        "occupiedFunnelPorts": system_occupied,
+        "systemPort443Available": system_443_available,
+        "recommendedFunnelPort": recommended,
+        "configured": enabled,
+        "active": active,
+        "customGptCompatible": active and funnel_port == 443,
+        "gatewayRunning": GATEWAY.running,
+        "gatewayPort": gateway_port or None,
+        "funnelPort": funnel_port or None,
+        "publicBaseUrl": origin,
+        "actionNodeSupported": bool(action_summary["supported"]),
+        "actionNodeRunning": bool(action_summary["running"]),
+        "actionNodeConnected": bool(action_summary["connected"]),
+        "actionNodeDnsName": str(action_summary["dnsName"]),
+        "actionNodeLoginUrl": _ACTION_NODE_LOGIN_URL,
+        "lastError": _LAST_ERROR,
+    }
 
 
 async def _verify_public_gateway(origin: str) -> None:
@@ -302,31 +558,78 @@ def _command_error(result: subprocess.CompletedProcess[str]) -> RuntimeError:
 
 async def enable_tailscale_remote_access() -> dict[str, Any]:
     global _LAST_ERROR
-    snapshot = await asyncio.to_thread(_tailscale_snapshot)
-    if not snapshot["installed"]:
-        raise FileNotFoundError("Tailscale is not installed.")
-    if not snapshot["connected"]:
-        raise RuntimeError("Tailscale is installed but this PC is not connected to a tailnet.")
-
-    config = snapshot["funnel"]
     state = _load_state()
     previous_state = dict(state)
     previous_public_url = public_base_url()
+
+    system_snapshot = await asyncio.to_thread(_tailscale_snapshot)
+    if not system_snapshot["installed"]:
+        raise FileNotFoundError("Tailscale is not installed.")
+    if not system_snapshot["connected"]:
+        raise RuntimeError("Tailscale is installed but this PC is not connected to a tailnet.")
+
+    enabled = state.get("provider") == "tailscale" and state.get("enabled") is True
+    if enabled:
+        mode = str(state.get("mode", "system"))
+        socket_path = _state_socket(state)
+        snapshot = await asyncio.to_thread(_tailscale_snapshot, socket_path)
+        if not snapshot.get("connected"):
+            if mode == "action-node":
+                raise RuntimeError(
+                    "The isolated Tailscale Action node is not running. Use Repair isolated endpoint first."
+                )
+            raise RuntimeError("The configured Tailscale node is not connected.")
+        funnel_port = int(state.get("funnelPort", 0) or 443)
+    else:
+        system_config = (
+            system_snapshot.get("funnel")
+            if isinstance(system_snapshot.get("funnel"), dict)
+            else {}
+        )
+        if 443 not in _occupied_funnel_ports(system_config):
+            mode = "system"
+            socket_path = None
+            snapshot = system_snapshot
+        else:
+            action_snapshot = await asyncio.to_thread(_try_action_node_snapshot)
+            action_config = (
+                action_snapshot.get("funnel")
+                if action_snapshot and isinstance(action_snapshot.get("funnel"), dict)
+                else {}
+            )
+            if (
+                action_snapshot
+                and action_snapshot.get("connected")
+                and 443 not in _occupied_funnel_ports(action_config)
+            ):
+                mode = "action-node"
+                socket_path = _ACTION_NODE_SOCKET
+                snapshot = action_snapshot
+            else:
+                raise RuntimeError(
+                    "HTTPS 443 is already used by an existing Tailscale service. "
+                    "Set up the isolated Custom GPT endpoint first; CUICommander will preserve the existing service."
+                )
+        funnel_port = 443
+
+    config = snapshot.get("funnel") if isinstance(snapshot.get("funnel"), dict) else {}
     gateway_port = int(state.get("gatewayPort", 0) or 0)
     if not gateway_port:
         gateway_port = _choose_gateway_port()
     elif not GATEWAY.running and not _port_available(gateway_port):
         raise RuntimeError("The saved CUICommander gateway port is now used by another process.")
 
-    funnel_port = int(state.get("funnelPort", 0) or 0)
     target = _gateway_target(gateway_port)
-    if funnel_port and funnel_port in _occupied_funnel_ports(config):
-        if not _funnel_matches(config, snapshot["dnsName"], funnel_port, target):
-            raise RuntimeError("The saved Tailscale Funnel port is now owned by another service.")
-    if not funnel_port:
-        funnel_port = _choose_funnel_port(config)
-    origin = _public_origin(snapshot["dnsName"], funnel_port)
-    existing_match = _funnel_matches(config, snapshot["dnsName"], funnel_port, target)
+    if funnel_port in _occupied_funnel_ports(config):
+        if not _funnel_matches(config, str(snapshot.get("dnsName", "")), funnel_port, target):
+            raise RuntimeError("The selected Tailscale Funnel port is owned by another service.")
+    origin = _public_origin(str(snapshot.get("dnsName", "")), funnel_port)
+    existing_match = _funnel_matches(
+        config,
+        str(snapshot.get("dnsName", "")),
+        funnel_port,
+        target,
+    )
     owns_existing = bool(state.get("ownsFunnel")) and existing_match
     from .version import VERSION
 
@@ -338,18 +641,25 @@ async def enable_tailscale_remote_access() -> dict[str, Any]:
                 _run_tailscale,
                 ["funnel", "--bg", "--yes", f"--https={funnel_port}", target],
                 30,
+                socket_path,
             )
             if result.returncode != 0:
                 raise _command_error(result)
             created_funnel = True
 
-        refreshed = await asyncio.to_thread(_tailscale_snapshot)
-        if not _funnel_matches(refreshed["funnel"], refreshed["dnsName"], funnel_port, target):
+        refreshed = await asyncio.to_thread(_tailscale_snapshot, socket_path)
+        if not _funnel_matches(
+            refreshed["funnel"],
+            refreshed["dnsName"],
+            funnel_port,
+            target,
+        ):
             raise RuntimeError("Tailscale did not keep the requested CUICommander Funnel mapping.")
         await _verify_public_gateway(origin)
 
         next_state = {
             "provider": "tailscale",
+            "mode": mode,
             "enabled": True,
             "gatewayPort": gateway_port,
             "funnelPort": funnel_port,
@@ -379,6 +689,7 @@ async def enable_tailscale_remote_access() -> dict[str, Any]:
                     _run_tailscale,
                     ["funnel", "--yes", f"--https={funnel_port}", "off"],
                     20,
+                    socket_path,
                 )
             except Exception:
                 pass
@@ -388,7 +699,12 @@ async def enable_tailscale_remote_access() -> dict[str, Any]:
     _LAST_ERROR = ""
     record_activity(
         "remote.enable",
-        {"provider": "tailscale", "funnelPort": funnel_port, "status": "active"},
+        {
+            "provider": "tailscale",
+            "mode": mode,
+            "funnelPort": funnel_port,
+            "status": "active",
+        },
     )
     return await asyncio.to_thread(_status_payload)
 
@@ -405,7 +721,8 @@ async def disable_tailscale_remote_access() -> dict[str, Any]:
     origin = str(state.get("publicBaseUrl", ""))
     previous_public_url = str(state.get("previousPublicBaseUrl", ""))
     owns_funnel = bool(state.get("ownsFunnel"))
-    snapshot = await asyncio.to_thread(_tailscale_snapshot)
+    socket_path = _state_socket(state)
+    snapshot = await asyncio.to_thread(_tailscale_snapshot, socket_path)
     target = _gateway_target(gateway_port) if gateway_port else ""
     if (
         owns_funnel
@@ -416,6 +733,7 @@ async def disable_tailscale_remote_access() -> dict[str, Any]:
             _run_tailscale,
             ["funnel", "--yes", f"--https={funnel_port}", "off"],
             20,
+            socket_path,
         )
         if result.returncode != 0:
             raise _command_error(result)
@@ -428,6 +746,7 @@ async def disable_tailscale_remote_access() -> dict[str, Any]:
     _write_state(
         {
             "provider": "tailscale",
+            "mode": str(state.get("mode", "system")),
             "enabled": False,
             "gatewayPort": gateway_port,
             "funnelPort": funnel_port,
@@ -502,6 +821,25 @@ async def remote_enable_handler(request: Any) -> Any:
         )
 
 
+async def remote_prepare_action_node_handler(request: Any) -> Any:
+    denied = _local_denied(request)
+    if denied:
+        return denied
+    confirmation = await _confirmation_error(
+        request, "Setting up the isolated Tailscale Action node"
+    )
+    if confirmation:
+        return confirmation
+    try:
+        result = await asyncio.to_thread(prepare_tailscale_action_node)
+        return _no_store(result)
+    except Exception as error:
+        return _no_store(
+            {"error": "action_node_setup_failed", "message": str(error)},
+            status=409,
+        )
+
+
 async def remote_disable_handler(request: Any) -> Any:
     denied = _local_denied(request)
     if denied:
@@ -527,6 +865,9 @@ async def _startup_remote_access(app: Any) -> None:
     try:
         gateway_port = int(state["gatewayPort"])
         origin = str(state["publicBaseUrl"])
+        if state.get("mode") == "action-node" and _try_action_node_snapshot() is None:
+            await asyncio.to_thread(_start_action_node_task)
+            await asyncio.to_thread(_wait_for_action_node, 8.0)
         from .version import VERSION
 
         await GATEWAY.start(origin, gateway_port, VERSION)
@@ -549,6 +890,9 @@ def register_remote_access() -> None:
     routes = PromptServer.instance.routes
     routes.get("/cuicommander/v1/local/remote")(remote_status_handler)
     routes.post("/cuicommander/v1/local/remote/tailscale/enable")(remote_enable_handler)
+    routes.post("/cuicommander/v1/local/remote/tailscale/action-node/prepare")(
+        remote_prepare_action_node_handler
+    )
     routes.post("/cuicommander/v1/local/remote/tailscale/disable")(remote_disable_handler)
     PromptServer.instance.app.on_startup.append(_startup_remote_access)
     PromptServer.instance.app.on_cleanup.append(_cleanup_remote_access)

@@ -21,10 +21,12 @@ from .resources import (
     delete_resource,
     inspect_resource,
     move_resource,
+    patch_resource,
+    read_resource,
     update_resource,
 )
 from .roots import discover_roots
-from .runtime import execute_native
+from .runtime import execute_native, read_runtime_response
 from .security import access_level, has_access, is_authorized, public_connection_info
 from .ui import register_ui_routes
 from .version import VERSION
@@ -108,8 +110,10 @@ async def manifest_handler(request: web.Request) -> web.Response:
             "noAdapterInvariant": True,
             "capabilities": {
                 "filesystemCrud": True,
+                "chunkedResourceIo": True,
                 "backgroundDownloads": True,
                 "nativeRouteExecution": True,
+                "chunkedNativeResponses": True,
             },
         }
     )
@@ -160,8 +164,9 @@ async def discover_handler(request: web.Request) -> web.Response:
             str(body.get("kind", "")),
             str(body.get("query", "")),
             int(body.get("limit", 100)),
+            int(body.get("offset", 0)),
         )
-        return web.json_response({"items": result})
+        return web.json_response(result)
     except Exception as error:
         return _exception_response(error)
 
@@ -173,8 +178,45 @@ async def inspect_handler(request: web.Request) -> web.Response:
     try:
         body = await _json(request)
         return web.json_response(
-            inspect_resource(str(body.get("root", "")), str(body.get("path", "")))
+            inspect_resource(
+                str(body.get("root", "")),
+                str(body.get("path", "")),
+                offset=int(body.get("offset", 0)),
+                limit=int(body.get("limit", 250)),
+                expected_fingerprint=body.get("expectedFingerprint"),
+            )
         )
+    except Exception as error:
+        return _exception_response(error)
+
+
+async def read_handler(request: web.Request) -> web.Response:
+    denied = _authorized(request)
+    if denied:
+        return denied
+    try:
+        return web.json_response(read_resource(await _json(request)))
+    except Exception as error:
+        return _exception_response(error)
+
+
+async def patch_handler(request: web.Request) -> web.Response:
+    denied = _authorized(request, "edit")
+    if denied:
+        return denied
+    try:
+        body = await _json(request)
+        result = patch_resource(body)
+        record_activity(
+            "resource.patch",
+            {
+                "root": body.get("root"),
+                "path": body.get("path"),
+                "offset": body.get("offset", 0),
+                "deleteBytes": body.get("deleteBytes", 0),
+            },
+        )
+        return web.json_response(result)
     except Exception as error:
         return _exception_response(error)
 
@@ -294,6 +336,16 @@ async def cancel_job_handler(request: web.Request) -> web.Response:
         return _exception_response(error)
 
 
+async def runtime_response_handler(request: web.Request) -> web.Response:
+    denied = _authorized(request, "full")
+    if denied:
+        return denied
+    try:
+        return web.json_response(read_runtime_response(await _json(request)))
+    except Exception as error:
+        return _exception_response(error)
+
+
 async def execute_handler(request: web.Request) -> web.Response:
     denied = _authorized(request, "full")
     if denied:
@@ -323,6 +375,8 @@ def register_routes() -> None:
     routes.post("/cuicommander/v1/local/credential/rotate")(local_rotate_handler)
     routes.post("/cuicommander/v1/discover")(discover_handler)
     routes.post("/cuicommander/v1/resources/inspect")(inspect_handler)
+    routes.post("/cuicommander/v1/resources/read")(read_handler)
+    routes.post("/cuicommander/v1/resources/patch")(patch_handler)
     routes.post("/cuicommander/v1/resources/create")(create_handler)
     routes.post("/cuicommander/v1/resources/update")(update_handler)
     routes.post("/cuicommander/v1/resources/move")(move_handler)
@@ -333,5 +387,6 @@ def register_routes() -> None:
     routes.get("/cuicommander/v1/jobs/{job_id}")(job_handler)
     routes.post("/cuicommander/v1/jobs/{job_id}/cancel")(cancel_job_handler)
     routes.post("/cuicommander/v1/execute")(execute_handler)
+    routes.post("/cuicommander/v1/runtime/responses/read")(runtime_response_handler)
     register_ui_routes(routes)
     _REGISTERED = True

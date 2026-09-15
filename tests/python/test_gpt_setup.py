@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import unittest
 
 from cuicommander.gpt_setup import GPT_INSTRUCTIONS, action_schema_url, setup_profile
@@ -17,11 +18,21 @@ class GptSetupTests(unittest.TestCase):
         )
         self.assertEqual(profile["authentication"]["scheme"], "bearer")
         self.assertEqual(profile["name"], "CUICommander")
+        schema = json.loads(profile["schema"])
+        self.assertEqual(schema["servers"], [{"url": "https://comfy.example"}])
+        self.assertIn("/cuicommander/v1/manifest", schema["paths"])
+        self.assertIn("/cuicommander/v1/resources/read", schema["paths"])
+        self.assertIn("/cuicommander/v1/resources/patch", schema["paths"])
+        self.assertIn("paste the generated OpenAPI schema directly", " ".join(profile["steps"]))
 
     def test_instructions_encode_universal_control_invariant(self) -> None:
         self.assertIn("Discover / Inspect -> Create / Read / Update / Delete -> Execute", GPT_INSTRUCTIONS)
         self.assertIn("untrusted data", GPT_INSTRUCTIONS)
         self.assertIn("Never bypass confirmation requirements", GPT_INSTRUCTIONS)
+        self.assertIn("readComfyUIResource", GPT_INSTRUCTIONS)
+        self.assertIn("patchComfyUIResource", GPT_INSTRUCTIONS)
+        self.assertIn("bounded preview is never a lack of access", GPT_INSTRUCTIONS)
+        self.assertIn("nextOffset", GPT_INSTRUCTIONS)
         self.assertIn("local setup/admin routes", GPT_INSTRUCTIONS)
 
 

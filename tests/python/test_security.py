@@ -38,6 +38,14 @@ class SecuritySettingsTests(unittest.TestCase):
             "https://comfy.example",
         )
         self.assertEqual(security.public_base_url(), "https://comfy.example")
+        self.assertEqual(
+            security.set_public_base_url("https://comfy.example:443"),
+            "https://comfy.example",
+        )
+        self.assertTrue(security.custom_gpt_compatible_origin("https://comfy.example"))
+        self.assertFalse(
+            security.custom_gpt_compatible_origin("https://comfy.example:10000")
+        )
 
     def test_public_endpoint_rejects_non_https_or_path(self) -> None:
         with self.assertRaises(ValueError):

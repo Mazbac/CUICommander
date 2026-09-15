@@ -17,6 +17,7 @@ import { Section } from './components/ui/Section'
 import {
   developmentRoots,
   type NativeResult,
+  type ResourceChunk,
   type ResourceInfo,
   type RootItem,
 } from './data/operator'
@@ -108,13 +109,48 @@ export function WorkflowsPage({ controlPlane }: Props) {
           body: JSON.stringify({ root, path: path.trim() }),
         },
       )
-      if (result.type !== 'file' || result.previewEncoding !== 'utf-8') {
-        throw new Error(
-          'Workflow path must be a UTF-8 JSON file within the preview limit.',
-        )
+      if (result.type !== 'file') {
+        throw new Error('Workflow path must be a UTF-8 JSON file.')
       }
+
+      let content = ''
+      if (!result.previewTruncated && result.previewEncoding === 'utf-8') {
+        content = String(result.preview ?? '')
+      } else {
+        let offset = 0
+        const chunks: string[] = []
+        while (true) {
+          const chunk = await request<ResourceChunk>(
+            '/cuicommander/v1/resources/read',
+            {
+              method: 'POST',
+              body: JSON.stringify({
+                root,
+                path: path.trim(),
+                offset,
+                maxBytes: 131072,
+                encoding: 'utf-8',
+                expectedFingerprint: result.fingerprint,
+              }),
+            },
+          )
+          if (chunk.fingerprint !== result.fingerprint) {
+            throw new Error(
+              'Workflow changed while it was being read. Load it again.',
+            )
+          }
+          chunks.push(chunk.content ?? '')
+          if (chunk.eof) break
+          if (chunk.nextOffset === null || chunk.nextOffset <= offset) {
+            throw new Error('Workflow read did not make forward progress.')
+          }
+          offset = chunk.nextOffset
+        }
+        content = chunks.join('')
+      }
+
       setLoaded(result)
-      setEditor(String(result.preview ?? ''))
+      setEditor(content)
     } catch (requestError) {
       setLoaded(null)
       setError(
@@ -220,7 +256,7 @@ export function WorkflowsPage({ controlPlane }: Props) {
         title="Prompt graph"
         description="This editor uses ComfyUI's API-format prompt object: node ids mapped to class_type and inputs. Discover node INPUT_TYPES in Runtime when composing unknown nodes."
       >
-        <Paper withBorder p="lg">
+        <Paper withBorder p="lg" className="cc-surface">
           <Stack gap="md">
             <Group align="end" wrap="wrap">
               <Select
@@ -244,7 +280,7 @@ export function WorkflowsPage({ controlPlane }: Props) {
                 flex={1}
               />
               <Button
-                variant="default"
+                variant="light"
                 loading={busy}
                 onClick={() => void load()}
               >
@@ -258,7 +294,7 @@ export function WorkflowsPage({ controlPlane }: Props) {
               maxRows={36}
               value={editor}
               onChange={(event) => setEditor(event.currentTarget.value)}
-              styles={{ input: { fontFamily: 'monospace' } }}
+              classNames={{ input: 'cc-mono' }}
             />
             <Group justify="space-between" wrap="wrap">
               <Text size="xs" c="dimmed">
@@ -290,7 +326,7 @@ export function WorkflowsPage({ controlPlane }: Props) {
 
       {queueResult && (
         <Section title="Last queue response">
-          <Paper withBorder p="lg">
+          <Paper withBorder p="lg" className="cc-surface">
             <Stack gap="xs">
               <Text fw={600}>HTTP {queueResult.status}</Text>
               <Code block>{JSON.stringify(queueResult.body, null, 2)}</Code>

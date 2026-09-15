@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import tempfile
 import unittest
 from pathlib import Path
@@ -125,6 +126,177 @@ class ResourceTests(unittest.TestCase):
                         "expectedFingerprint": inspected["fingerprint"],
                     }
                 )
+    def test_large_utf8_file_is_completely_readable_in_chunks(self) -> None:
+        text = ("node-data-" * 9000) + "â‚¬ tail"
+        target = self.base / "workflow.json"
+        target.write_text(text, encoding="utf-8")
+
+        inspected = resources.inspect_resource("root", "workflow.json")
+        self.assertTrue(inspected["previewTruncated"])
+        self.assertIsNone(inspected["preview"])
+
+        offset = 0
+        chunks: list[str] = []
+        while True:
+            chunk = resources.read_resource(
+                {
+                    "root": "root",
+                    "path": "workflow.json",
+                    "offset": offset,
+                    "maxBytes": 4096,
+                    "encoding": "utf-8",
+                    "expectedFingerprint": inspected["fingerprint"],
+                }
+            )
+            self.assertEqual(chunk["fingerprint"], inspected["fingerprint"])
+            chunks.append(chunk["content"])
+            if chunk["eof"]:
+                self.assertIsNone(chunk["nextOffset"])
+                break
+            self.assertGreater(chunk["nextOffset"], offset)
+            offset = chunk["nextOffset"]
+
+        self.assertEqual("".join(chunks), text)
+
+    def test_utf8_chunk_boundary_never_splits_a_character(self) -> None:
+        text = ("a" * 1023) + "â‚¬tail"
+        (self.base / "utf8.txt").write_text(text, encoding="utf-8")
+        inspected = resources.inspect_resource("root", "utf8.txt")
+
+        first = resources.read_resource(
+            {
+                "root": "root",
+                "path": "utf8.txt",
+                "maxBytes": 1024,
+                "encoding": "utf-8",
+                "expectedFingerprint": inspected["fingerprint"],
+            }
+        )
+        self.assertEqual(first["bytesRead"], 1023)
+        second = resources.read_resource(
+            {
+                "root": "root",
+                "path": "utf8.txt",
+                "offset": first["nextOffset"],
+                "maxBytes": 1024,
+                "encoding": "utf-8",
+                "expectedFingerprint": inspected["fingerprint"],
+            }
+        )
+        self.assertEqual(first["content"] + second["content"], text)
+        self.assertTrue(second["eof"])
+
+    def test_binary_chunks_reconstruct_exact_bytes(self) -> None:
+        data = bytes(range(256)) * 80
+        (self.base / "binary.bin").write_bytes(data)
+        inspected = resources.inspect_resource("root", "binary.bin")
+
+        offset = 0
+        reconstructed = bytearray()
+        while True:
+            chunk = resources.read_resource(
+                {
+                    "root": "root",
+                    "path": "binary.bin",
+                    "offset": offset,
+                    "maxBytes": 2048,
+                    "encoding": "base64",
+                    "expectedFingerprint": inspected["fingerprint"],
+                }
+            )
+            reconstructed.extend(base64.b64decode(chunk["contentBase64"]))
+            if chunk["eof"]:
+                break
+            offset = chunk["nextOffset"]
+        self.assertEqual(bytes(reconstructed), data)
+
+    def test_chunk_read_rejects_stale_fingerprint(self) -> None:
+        target = self.base / "stale.txt"
+        target.write_text("before", encoding="utf-8")
+        inspected = resources.inspect_resource("root", "stale.txt")
+        target.write_text("after", encoding="utf-8")
+        with self.assertRaisesRegex(RuntimeError, "changed during chunked read"):
+            resources.read_resource(
+                {
+                    "root": "root",
+                    "path": "stale.txt",
+                    "expectedFingerprint": inspected["fingerprint"],
+                }
+            )
+
+    def test_patch_replaces_and_appends_with_fresh_fingerprints(self) -> None:
+        target = self.base / "patch.txt"
+        target.write_text("prefix-middle-suffix", encoding="utf-8")
+        inspected = resources.inspect_resource("root", "patch.txt")
+        patched = resources.patch_resource(
+            {
+                "root": "root",
+                "path": "patch.txt",
+                "expectedFingerprint": inspected["fingerprint"],
+                "offset": len("prefix-"),
+                "deleteBytes": len("middle"),
+                "content": "NEW",
+            }
+        )
+        self.assertEqual(target.read_text(encoding="utf-8"), "prefix-NEW-suffix")
+        self.assertNotEqual(patched["fingerprint"], inspected["fingerprint"])
+
+        appended = resources.patch_resource(
+            {
+                "root": "root",
+                "path": "patch.txt",
+                "expectedFingerprint": patched["fingerprint"],
+                "offset": target.stat().st_size,
+                "deleteBytes": 0,
+                "content": "+tail",
+            }
+        )
+        self.assertEqual(target.read_text(encoding="utf-8"), "prefix-NEW-suffix+tail")
+        with self.assertRaises(RuntimeError):
+            resources.patch_resource(
+                {
+                    "root": "root",
+                    "path": "patch.txt",
+                    "expectedFingerprint": patched["fingerprint"],
+                    "offset": 0,
+                    "deleteBytes": 0,
+                    "content": "stale",
+                }
+            )
+        self.assertEqual(appended["fingerprint"], resources.fingerprint(target)[0])
+
+    def test_directory_pagination_has_no_hidden_items(self) -> None:
+        directory = self.base / "many"
+        directory.mkdir()
+        for index in range(275):
+            (directory / f"file-{index:03d}.txt").write_text(str(index), encoding="utf-8")
+
+        first = resources.inspect_resource("root", "many", offset=0, limit=250)
+        second = resources.inspect_resource(
+            "root",
+            "many",
+            offset=first["nextOffset"],
+            limit=250,
+            expected_fingerprint=first["fingerprint"],
+        )
+        names = [item["name"] for item in first["items"] + second["items"]]
+        self.assertEqual(len(names), 275)
+        self.assertEqual(len(set(names)), 275)
+        self.assertEqual(first["totalItems"], 275)
+        self.assertTrue(first["truncated"])
+        self.assertFalse(second["truncated"])
+        self.assertIsNone(second["nextOffset"])
+
+        (directory / "new-after-first-page.txt").write_text("new", encoding="utf-8")
+        with self.assertRaisesRegex(RuntimeError, "changed while it was being paged"):
+            resources.inspect_resource(
+                "root",
+                "many",
+                offset=first["nextOffset"],
+                limit=250,
+                expected_fingerprint=first["fingerprint"],
+            )
+
     def test_root_move_and_delete_are_blocked(self) -> None:
         with self.assertRaisesRegex(ValueError, "root is not allowed"):
             resources.move_resource(

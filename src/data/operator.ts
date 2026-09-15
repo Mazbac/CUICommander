@@ -19,11 +19,40 @@ export type ResourceInfo = ResourceEntry & {
   fingerprint: string
   fingerprintMode: string
   items?: ResourceEntry[]
+  itemOffset?: number
+  itemLimit?: number
+  totalItems?: number
+  nextOffset?: number | null
   truncated?: boolean
   mimeType?: string
   preview?: string | null
   previewEncoding?: 'utf-8' | 'base64'
   previewTruncated?: boolean
+}
+
+export type ResourceChunk = {
+  root: string
+  path: string
+  size: number
+  offset: number
+  fingerprint: string
+  fingerprintMode: string
+  mimeType: string
+  encoding: 'utf-8' | 'base64'
+  content?: string
+  contentBase64?: string
+  bytesRead: number
+  eof: boolean
+  nextOffset: number | null
+}
+
+export type DiscoveryPage<T> = {
+  items: T[]
+  offset: number
+  limit: number
+  totalItems: number
+  nextOffset: number | null
+  complete: boolean
 }
 
 export type JobItem = {
@@ -63,6 +92,22 @@ export type NativeResult = {
   contentType: string
   body: unknown
   bodyTruncated: boolean
+  responseId?: string | null
+  responseSize?: number
+  nextOffset?: number | null
+}
+
+export type NativeResponseChunk = {
+  responseId: string
+  size: number
+  offset: number
+  contentType: string
+  encoding: 'utf-8' | 'base64'
+  content?: string
+  contentBase64?: string
+  bytesRead: number
+  eof: boolean
+  nextOffset: number | null
 }
 
 export type ActivityItem = {

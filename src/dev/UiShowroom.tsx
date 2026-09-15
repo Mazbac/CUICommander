@@ -34,7 +34,7 @@ export function UiShowroom() {
       />
 
       <Section title="Controls">
-        <Paper withBorder p="lg">
+        <Paper withBorder p="lg" className="cc-surface">
           <SimpleGrid cols={{ base: 1, md: 2 }} spacing="lg">
             <Stack gap="md">
               <TextInput
@@ -49,9 +49,15 @@ export function UiShowroom() {
             </Stack>
             <Stack gap="md" justify="space-between">
               <Group>
-                <Badge>Active</Badge>
-                <Badge color="yellow">Warning</Badge>
-                <Badge color="red">Error</Badge>
+                <Badge color="green" variant="light">
+                  Active
+                </Badge>
+                <Badge color="yellow" variant="light">
+                  Warning
+                </Badge>
+                <Badge color="red" variant="light">
+                  Error
+                </Badge>
               </Group>
               <Group justify="flex-end">
                 <Button variant="default">Cancel</Button>
@@ -63,7 +69,7 @@ export function UiShowroom() {
       </Section>
 
       <Section title="Data">
-        <Paper withBorder>
+        <Paper withBorder className="cc-surface">
           <ScrollArea>
             <Table verticalSpacing="sm" horizontalSpacing="md" highlightOnHover>
               <Table.Thead>
@@ -94,7 +100,7 @@ export function UiShowroom() {
       </Section>
 
       <Section title="Empty state">
-        <Paper withBorder>
+        <Paper withBorder className="cc-surface">
           <EmptyState
             title="No projects yet"
             description="Create a project to get started."

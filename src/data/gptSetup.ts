@@ -11,6 +11,7 @@ export type LocalSetupState = {
   }
   readiness: {
     httpsEndpoint: boolean
+    customGptOrigin: boolean
     fullControl: boolean
     readyForCustomGPT: boolean
   }
@@ -18,6 +19,7 @@ export type LocalSetupState = {
     name: string
     description: string
     instructions: string
+    schema: string
     schemaUrl: string
     authentication: {
       type: string
@@ -97,6 +99,7 @@ export const developmentLocalSetup: LocalSetupState = {
   },
   readiness: {
     httpsEndpoint: false,
+    customGptOrigin: false,
     fullControl: false,
     readyForCustomGPT: false,
   },
@@ -105,6 +108,16 @@ export const developmentLocalSetup: LocalSetupState = {
     description: 'Universal ComfyUI control plane for ChatGPT Actions.',
     instructions:
       'Discover the live ComfyUI state, use generic CRUD/transfers, execute only discovered native routes, preserve confirmation gates, and verify consequential changes.',
+    schema: JSON.stringify(
+      {
+        openapi: '3.1.0',
+        info: { title: 'CUICommander', version: '0.5.0-dev' },
+        servers: [{ url: 'https://comfy.example.com' }],
+        paths: {},
+      },
+      null,
+      2,
+    ),
     schemaUrl: 'http://127.0.0.1:8188/cuicommander/v1/openapi',
     authentication: {
       type: 'api_key',
@@ -115,7 +128,7 @@ export const developmentLocalSetup: LocalSetupState = {
     steps: [
       'Create a Custom GPT in ChatGPT.',
       'Paste the generated CUICommander instructions.',
-      'Create an Action and import the generated OpenAPI schema URL.',
+      'Create an Action and paste the generated OpenAPI schema directly into the Schema editor.',
       'Configure Action authentication as an API key using Bearer authentication.',
       'Paste the CUICommander access key and run getCUICommanderManifest as the first test.',
     ],

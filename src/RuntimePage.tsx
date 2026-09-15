@@ -18,6 +18,8 @@ import { Section } from './components/ui/Section'
 import {
   developmentNodes,
   developmentRoutes,
+  type DiscoveryPage,
+  type NativeResponseChunk,
   type NativeResult,
   type NodeItem,
   type RouteItem,
@@ -37,6 +39,10 @@ export function RuntimePage({ controlPlane }: Props) {
   const [routes, setRoutes] = useState<RouteItem[]>(
     development ? developmentRoutes : [],
   )
+  const [discoveryNextOffset, setDiscoveryNextOffset] = useState<number | null>(
+    null,
+  )
+  const [discoveryTotal, setDiscoveryTotal] = useState<number | null>(null)
   const [method, setMethod] = useState('GET')
   const [route, setRoute] = useState('/system_stats')
   const [queryJson, setQueryJson] = useState('{}')
@@ -52,7 +58,7 @@ export function RuntimePage({ controlPlane }: Props) {
     setError(null)
     try {
       if (kind === 'nodes') {
-        const response = await request<{ items: NodeItem[] }>(
+        const response = await request<DiscoveryPage<NodeItem>>(
           '/cuicommander/v1/discover',
           {
             method: 'POST',
@@ -60,8 +66,10 @@ export function RuntimePage({ controlPlane }: Props) {
           },
         )
         setNodes(response.items)
+        setDiscoveryNextOffset(response.nextOffset)
+        setDiscoveryTotal(response.totalItems)
       } else {
-        const response = await request<{ items: RouteItem[] }>(
+        const response = await request<DiscoveryPage<RouteItem>>(
           '/cuicommander/v1/discover',
           {
             method: 'POST',
@@ -69,6 +77,8 @@ export function RuntimePage({ controlPlane }: Props) {
           },
         )
         setRoutes(response.items)
+        setDiscoveryNextOffset(response.nextOffset)
+        setDiscoveryTotal(response.totalItems)
       }
     } catch (requestError) {
       setError(
@@ -80,6 +90,55 @@ export function RuntimePage({ controlPlane }: Props) {
       setBusy(false)
     }
   }, [development, kind, query, request, state])
+
+  const loadMoreDiscovery = async () => {
+    if (development || state !== 'ready' || discoveryNextOffset == null) return
+    setBusy(true)
+    setError(null)
+    try {
+      if (kind === 'nodes') {
+        const response = await request<DiscoveryPage<NodeItem>>(
+          '/cuicommander/v1/discover',
+          {
+            method: 'POST',
+            body: JSON.stringify({
+              kind,
+              query,
+              limit: 250,
+              offset: discoveryNextOffset,
+            }),
+          },
+        )
+        setNodes((current) => [...current, ...response.items])
+        setDiscoveryNextOffset(response.nextOffset)
+        setDiscoveryTotal(response.totalItems)
+      } else {
+        const response = await request<DiscoveryPage<RouteItem>>(
+          '/cuicommander/v1/discover',
+          {
+            method: 'POST',
+            body: JSON.stringify({
+              kind,
+              query,
+              limit: 500,
+              offset: discoveryNextOffset,
+            }),
+          },
+        )
+        setRoutes((current) => [...current, ...response.items])
+        setDiscoveryNextOffset(response.nextOffset)
+        setDiscoveryTotal(response.totalItems)
+      }
+    } catch (requestError) {
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : 'Could not load the next discovery page.',
+      )
+    } finally {
+      setBusy(false)
+    }
+  }
 
   useEffect(() => {
     const timer = window.setTimeout(() => void discover(), 0)
@@ -115,6 +174,53 @@ export function RuntimePage({ controlPlane }: Props) {
     }
   }
 
+  const loadFullResponse = async () => {
+    if (!result?.responseId) return
+    setBusy(true)
+    setError(null)
+    try {
+      let offset = 0
+      const chunks: string[] = []
+      while (true) {
+        const chunk = await request<NativeResponseChunk>(
+          '/cuicommander/v1/runtime/responses/read',
+          {
+            method: 'POST',
+            body: JSON.stringify({
+              responseId: result.responseId,
+              offset,
+              maxBytes: 131072,
+              encoding: 'utf-8',
+            }),
+          },
+        )
+        chunks.push(chunk.content ?? '')
+        if (chunk.eof) break
+        if (chunk.nextOffset === null || chunk.nextOffset <= offset) {
+          throw new Error('Response read did not make forward progress.')
+        }
+        offset = chunk.nextOffset
+      }
+      const text = chunks.join('')
+      let body: unknown = text
+      if (
+        result.contentType === 'application/json' ||
+        result.contentType.endsWith('+json')
+      ) {
+        body = JSON.parse(text)
+      }
+      setResult({ ...result, body, bodyTruncated: false, nextOffset: null })
+    } catch (requestError) {
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : 'Could not read the complete native response.',
+      )
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return (
     <Stack gap="xl">
       <PageHeader
@@ -131,7 +237,7 @@ export function RuntimePage({ controlPlane }: Props) {
         title="Discover"
         description="No provider adapters: inspect whatever the current ComfyUI runtime exposes."
       >
-        <Paper withBorder p="lg">
+        <Paper withBorder p="lg" className="cc-surface">
           <Stack gap="md">
             <SegmentedControl
               value={kind}
@@ -146,15 +252,15 @@ export function RuntimePage({ controlPlane }: Props) {
                 label="Search"
                 placeholder={
                   kind === 'nodes'
-                    ? 'KSampler, audio, control…'
-                    : '/prompt, history, manager…'
+                    ? 'KSampler, audio, controlÃ¢â‚¬Â¦'
+                    : '/prompt, history, managerÃ¢â‚¬Â¦'
                 }
                 value={query}
                 onChange={(event) => setQuery(event.currentTarget.value)}
                 flex={1}
               />
               <Button
-                variant="default"
+                variant="light"
                 loading={busy}
                 onClick={() => void discover()}
               >
@@ -163,7 +269,7 @@ export function RuntimePage({ controlPlane }: Props) {
             </Group>
           </Stack>
         </Paper>
-        <Paper withBorder>
+        <Paper withBorder className="cc-surface">
           <Table verticalSpacing="sm" horizontalSpacing="md">
             <Table.Thead>
               <Table.Tr>
@@ -181,7 +287,9 @@ export function RuntimePage({ controlPlane }: Props) {
                     <Table.Td>
                       <Code>{(item as NodeItem).name}</Code>
                     </Table.Td>
-                    <Table.Td>{(item as NodeItem).category || '—'}</Table.Td>
+                    <Table.Td>
+                      {(item as NodeItem).category || 'Ã¢â‚¬â€'}
+                    </Table.Td>
                     <Table.Td>
                       <Text size="sm">{(item as NodeItem).module}</Text>
                       <Text size="xs" c="dimmed">
@@ -209,12 +317,24 @@ export function RuntimePage({ controlPlane }: Props) {
             </Table.Tbody>
           </Table>
         </Paper>
+        {discoveryNextOffset != null && (
+          <Group justify="center">
+            <Button
+              variant="default"
+              loading={busy}
+              onClick={() => void loadMoreDiscovery()}
+            >
+              Load more ({kind === 'nodes' ? nodes.length : routes.length} of{' '}
+              {discoveryTotal ?? '…'})
+            </Button>
+          </Group>
+        )}
       </Section>{' '}
       <Section
         title="Native execution"
         description="Invoke only routes that exist in the live ComfyUI router. Mutating calls require Full control and explicit confirmation."
       >
-        <Paper withBorder p="lg">
+        <Paper withBorder p="lg" className="cc-surface">
           <Stack gap="md">
             <Group align="end" wrap="wrap">
               <SegmentedControl
@@ -238,7 +358,7 @@ export function RuntimePage({ controlPlane }: Props) {
               </Button>
             </Group>
             {!full && (
-              <Alert color="yellow">
+              <Alert className="cc-warning-alert" color="yellow">
                 Native route execution requires Full control. Discovery remains
                 available.
               </Alert>
@@ -248,7 +368,7 @@ export function RuntimePage({ controlPlane }: Props) {
               minRows={3}
               value={queryJson}
               onChange={(event) => setQueryJson(event.currentTarget.value)}
-              styles={{ input: { fontFamily: 'monospace' } }}
+              classNames={{ input: 'cc-mono' }}
             />{' '}
             {method !== 'GET' && (
               <Textarea
@@ -256,11 +376,11 @@ export function RuntimePage({ controlPlane }: Props) {
                 minRows={6}
                 value={bodyJson}
                 onChange={(event) => setBodyJson(event.currentTarget.value)}
-                styles={{ input: { fontFamily: 'monospace' } }}
+                classNames={{ input: 'cc-mono' }}
               />
             )}
             {result && (
-              <Paper withBorder p="md">
+              <Paper withBorder p="md" className="cc-surface">
                 <Stack gap="xs">
                   <Group justify="space-between" wrap="wrap">
                     <Text fw={600}>HTTP {result.status}</Text>
@@ -269,11 +389,28 @@ export function RuntimePage({ controlPlane }: Props) {
                     </Badge>
                   </Group>
                   <Code block>{JSON.stringify(result.body, null, 2)}</Code>
-                  {result.bodyTruncated && (
-                    <Text size="xs" c="orange">
-                      Response preview was truncated by the runtime safety
-                      limit.
-                    </Text>
+                  {result.bodyTruncated && result.responseId && (
+                    <Stack gap="xs">
+                      <Text size="xs" c="dimmed">
+                        The full response is retained (
+                        {result.responseSize ?? 'unknown'} bytes). Read it in
+                        chunks instead of losing data at the inline limit.
+                      </Text>
+                      {(result.contentType.startsWith('text/') ||
+                        result.contentType === 'application/json' ||
+                        result.contentType.endsWith('+json')) && (
+                        <Group>
+                          <Button
+                            size="xs"
+                            variant="default"
+                            loading={busy}
+                            onClick={() => void loadFullResponse()}
+                          >
+                            Load complete response
+                          </Button>
+                        </Group>
+                      )}
+                    </Stack>
                   )}
                 </Stack>
               </Paper>

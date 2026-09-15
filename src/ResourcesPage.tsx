@@ -14,11 +14,13 @@ import {
   Textarea,
   TextInput,
 } from '@mantine/core'
+import { EmptyState } from './components/ui/EmptyState'
 import { PageHeader } from './components/ui/PageHeader'
 import { Section } from './components/ui/Section'
 import {
   developmentResource,
   developmentRoots,
+  type ResourceChunk,
   type ResourceInfo,
   type RootItem,
 } from './data/operator'
@@ -85,6 +87,98 @@ export function ResourcesPage({ controlPlane }: Props) {
     },
     [development, path, request, root],
   )
+
+  const loadMoreDirectory = async () => {
+    if (
+      !resource ||
+      resource.type !== 'directory' ||
+      resource.nextOffset == null
+    )
+      return
+    setBusy(true)
+    setError(null)
+    try {
+      const page = await request<ResourceInfo>(
+        '/cuicommander/v1/resources/inspect',
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            root: resource.root,
+            path: resource.path,
+            offset: resource.nextOffset,
+            limit: resource.itemLimit ?? 250,
+            expectedFingerprint: resource.fingerprint,
+          }),
+        },
+      )
+      if (page.fingerprint !== resource.fingerprint) {
+        throw new Error(
+          'Directory changed while it was being paged. Inspect it again.',
+        )
+      }
+      setResource({
+        ...page,
+        items: [...(resource.items ?? []), ...(page.items ?? [])],
+        itemOffset: 0,
+      })
+    } catch (requestError) {
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : 'Could not load the next directory page.',
+      )
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const loadFullText = async () => {
+    if (!resource || resource.type !== 'file') return
+    setBusy(true)
+    setError(null)
+    try {
+      let offset = 0
+      const chunks: string[] = []
+      while (true) {
+        const chunk = await request<ResourceChunk>(
+          '/cuicommander/v1/resources/read',
+          {
+            method: 'POST',
+            body: JSON.stringify({
+              root: resource.root,
+              path: resource.path,
+              offset,
+              maxBytes: 131072,
+              encoding: 'utf-8',
+              expectedFingerprint: resource.fingerprint,
+            }),
+          },
+        )
+        chunks.push(chunk.content ?? '')
+        if (chunk.eof) break
+        if (chunk.nextOffset === null || chunk.nextOffset <= offset) {
+          throw new Error('File read did not make forward progress.')
+        }
+        offset = chunk.nextOffset
+      }
+      const content = chunks.join('')
+      setEditor(content)
+      setResource({
+        ...resource,
+        preview: content,
+        previewEncoding: 'utf-8',
+        previewTruncated: false,
+      })
+    } catch (requestError) {
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : 'Could not read the complete UTF-8 file.',
+      )
+    } finally {
+      setBusy(false)
+    }
+  }
 
   useEffect(() => {
     if (development || state !== 'ready') return
@@ -254,7 +348,7 @@ export function ResourcesPage({ controlPlane }: Props) {
         title="Browse"
         description="Inspect first; mutations use the returned fingerprint."
       >
-        <Paper withBorder p="lg">
+        <Paper withBorder p="lg" className="cc-surface">
           <Stack gap="md">
             <SimpleGrid cols={{ base: 1, md: 2 }}>
               <Select
@@ -285,7 +379,7 @@ export function ResourcesPage({ controlPlane }: Props) {
           </Stack>
         </Paper>
         {resource && (
-          <Paper withBorder p="lg">
+          <Paper withBorder p="lg" className="cc-surface">
             <Stack gap="md">
               <Group justify="space-between" align="flex-start" wrap="wrap">
                 <Stack gap={4}>
@@ -297,33 +391,49 @@ export function ResourcesPage({ controlPlane }: Props) {
                   <Badge variant="outline">{resource.fingerprintMode}</Badge>
                 </Group>
               </Group>
-              {resource.type === 'directory' && (
-                <Table.ScrollContainer minWidth={620}>
-                  <Table striped highlightOnHover>
-                    <Table.Thead>
-                      <Table.Tr>
-                        <Table.Th>Name</Table.Th>
-                        <Table.Th>Type</Table.Th>
-                        <Table.Th>Size</Table.Th>
-                      </Table.Tr>
-                    </Table.Thead>
-                    <Table.Tbody>
-                      {(resource.items ?? []).map((item) => (
-                        <Table.Tr
-                          key={item.name}
-                          onClick={() =>
-                            void inspect(root, joinPath(path, item.name))
-                          }
-                        >
-                          <Table.Td>{item.name}</Table.Td>
-                          <Table.Td>{item.type}</Table.Td>
-                          <Table.Td>{item.size ?? '—'}</Table.Td>
+              {resource.type === 'directory' &&
+                (resource.items ?? []).length === 0 && (
+                  <EmptyState
+                    title="This folder is empty"
+                    description="Create a resource here or inspect another path."
+                  />
+                )}
+              {resource.type === 'directory' &&
+                (resource.items ?? []).length > 0 && (
+                  <Table.ScrollContainer minWidth={620}>
+                    <Table striped highlightOnHover>
+                      <Table.Thead>
+                        <Table.Tr>
+                          <Table.Th>Name</Table.Th>
+                          <Table.Th>Type</Table.Th>
+                          <Table.Th>Size</Table.Th>
                         </Table.Tr>
-                      ))}
-                    </Table.Tbody>
-                  </Table>
-                </Table.ScrollContainer>
-              )}
+                      </Table.Thead>
+                      <Table.Tbody>
+                        {(resource.items ?? []).map((item) => (
+                          <Table.Tr
+                            key={item.name}
+                            className="cc-table-row-action"
+                            tabIndex={0}
+                            onClick={() =>
+                              void inspect(root, joinPath(path, item.name))
+                            }
+                            onKeyDown={(event) => {
+                              if (event.key === 'Enter' || event.key === ' ') {
+                                event.preventDefault()
+                                void inspect(root, joinPath(path, item.name))
+                              }
+                            }}
+                          >
+                            <Table.Td>{item.name}</Table.Td>
+                            <Table.Td>{item.type}</Table.Td>
+                            <Table.Td>{item.size ?? 'Ã¢â‚¬â€'}</Table.Td>
+                          </Table.Tr>
+                        ))}
+                      </Table.Tbody>
+                    </Table>
+                  </Table.ScrollContainer>
+                )}
               {resource.type === 'file' &&
                 resource.previewEncoding === 'utf-8' && (
                   <Textarea
@@ -343,9 +453,40 @@ export function ResourcesPage({ controlPlane }: Props) {
                     edited as text here.
                   </Alert>
                 )}
+              {resource.type === 'directory' && resource.nextOffset != null && (
+                <Group justify="center">
+                  <Button
+                    variant="default"
+                    loading={busy}
+                    onClick={() => void loadMoreDirectory()}
+                  >
+                    Load more ({(resource.items ?? []).length} of{' '}
+                    {resource.totalItems ?? 'â€¦'})
+                  </Button>
+                </Group>
+              )}
               {resource.previewTruncated && (
-                <Alert color="yellow">
-                  This file is larger than the bounded preview limit.
+                <Alert
+                  className="cc-warning-alert"
+                  color="yellow"
+                  title="Preview is bounded, access is not"
+                >
+                  <Stack gap="xs">
+                    <Text size="sm">
+                      This file is larger than the inline preview. Read it in
+                      chunks to access the complete file.
+                    </Text>
+                    <Group>
+                      <Button
+                        size="xs"
+                        variant="default"
+                        loading={busy}
+                        onClick={() => void loadFullText()}
+                      >
+                        Load complete UTF-8 file
+                      </Button>
+                    </Group>
+                  </Stack>
                 </Alert>
               )}
               {canEdit &&
@@ -368,7 +509,7 @@ export function ResourcesPage({ controlPlane }: Props) {
           description="Create, move, or delete within the selected discovered root."
         >
           <SimpleGrid cols={{ base: 1, md: 2 }}>
-            <Paper withBorder p="lg">
+            <Paper withBorder p="lg" className="cc-surface">
               <Stack gap="sm">
                 <Text fw={600}>Create</Text>
                 <TextInput
@@ -396,7 +537,7 @@ export function ResourcesPage({ controlPlane }: Props) {
                 </Button>
               </Stack>
             </Paper>
-            <Paper withBorder p="lg">
+            <Paper withBorder p="lg" className="cc-surface">
               <Stack gap="sm">
                 <Text fw={600}>Selected resource</Text>
                 <Text size="sm" c="dimmed">

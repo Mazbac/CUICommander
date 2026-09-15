@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { Group, Stack, Text, Title } from '@mantine/core'
+import { Box, Group, Stack, Text, Title } from '@mantine/core'
 
 type PageHeaderProps = {
   title: string
@@ -9,18 +9,22 @@ type PageHeaderProps = {
 
 export function PageHeader({ title, description, actions }: PageHeaderProps) {
   return (
-    <Group justify="space-between" align="flex-start" wrap="wrap">
-      <Stack gap="xs">
+    <Group justify="space-between" align="flex-start" wrap="wrap" gap="lg">
+      <Stack gap={4} maw="48rem">
         <Title order={1} size="h2">
           {title}
         </Title>
         {description ? (
-          <Text c="dimmed" size="sm">
+          <Text c="dimmed" size="sm" lh={1.55}>
             {description}
           </Text>
         ) : null}
       </Stack>
-      {actions}
+      {actions ? (
+        <Box w={{ base: '100%', sm: 'auto' }} maw="100%">
+          {actions}
+        </Box>
+      ) : null}
     </Group>
   )
 }

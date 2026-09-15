@@ -21,7 +21,7 @@ function readAccessKey() {
   return token
 }
 async function connectIfNeeded(page) {
-  const ready = page.getByText('Ready', { exact: true })
+  const ready = page.getByText('Managed roots', { exact: true })
   const accessInput = page.getByLabel('Access key', { exact: true })
   await Promise.any([
     ready.waitFor({ timeout: 10_000 }),
@@ -42,11 +42,6 @@ try {
   await page.goto(`${root}/cuicommander/`, { waitUntil: 'networkidle' })
   await page.getByRole('heading', { name: 'CUICommander' }).waitFor()
   await connectIfNeeded(page)
-  await page.getByText(/CUICommander .* \| ComfyUI /).waitFor()
-  await page
-    .getByRole('table')
-    .getByText('ComfyUI base directory', { exact: true })
-    .waitFor()
 
   const openapiResponse = await page.request.get(
     `${root}/cuicommander/v1/openapi`,
@@ -63,17 +58,20 @@ try {
     )
   }
 
-  const publicOrigin = page.getByLabel('Public origin')
-  if (await publicOrigin.isVisible().catch(() => false)) {
-    await page.getByText('Custom GPT setup', { exact: true }).waitFor()
-    await page.getByText('2. Remote access', { exact: true }).waitFor()
-    await page.getByRole('button', { name: 'Refresh detection' }).waitFor()
-    await page.getByRole('button', { name: 'Copy instructions' }).waitFor()
-    await page.getByRole('button', { name: 'Copy Action schema URL' }).waitFor()
-    const localKey = await page.getByLabel('Action access key').inputValue()
-    if (!localKey)
-      throw new Error('Local setup did not provide an Action access key.')
+  await page.getByText('Connect ChatGPT', { exact: true }).waitFor()
+  const copyInstructions = page.getByRole('button', {
+    name: 'Copy instructions',
+  })
+  if (!(await copyInstructions.isVisible().catch(() => false))) {
+    await page
+      .getByRole('button', { name: /3 Copy the connection into ChatGPT/ })
+      .click()
   }
+  await copyInstructions.waitFor()
+  await page.getByRole('button', { name: 'Copy Action schema' }).waitFor()
+  const localKey = await page.getByLabel('Action access key').inputValue()
+  if (!localKey)
+    throw new Error('Local setup did not provide an Action access key.')
 
   for (const [link, heading] of [
     ['Resources', 'Resources'],
@@ -88,13 +86,16 @@ try {
       .waitFor({ timeout: 10_000 })
   }
 
-  await page.getByRole('link', { name: 'Overview', exact: true }).click()
+  await page.getByRole('link', { name: 'Setup & status', exact: true }).click()
   await page.reload({ waitUntil: 'networkidle' })
   await connectIfNeeded(page)
 
-  await page.getByRole('button', { name: 'Disconnect' }).click()
-  await page.getByText('Authentication required', { exact: true }).waitFor()
-  await page.getByLabel('Access key', { exact: true }).waitFor()
+  const disconnect = page.getByRole('button', { name: 'Disconnect' })
+  if (await disconnect.isVisible().catch(() => false)) {
+    await disconnect.click()
+    await page.getByText('Authentication required', { exact: true }).waitFor()
+    await page.getByLabel('Access key', { exact: true }).waitFor()
+  }
 
   console.log('Live embedded UI and Custom GPT setup acceptance passed.')
 } finally {

@@ -1,12 +1,30 @@
-import { useEffect, useState } from 'react'
-import { ActivityPage } from './ActivityPage'
+import { lazy, Suspense, useEffect, useState } from 'react'
+import { Center, Loader } from '@mantine/core'
 import { AppFrame, type PageId } from './layouts/AppFrame'
 import { OverviewPage } from './OverviewPage'
-import { ResourcesPage } from './ResourcesPage'
-import { RuntimePage } from './RuntimePage'
-import { TransfersPage } from './TransfersPage'
-import { WorkflowsPage } from './WorkflowsPage'
 import { useControlPlane } from './hooks/useControlPlane'
+
+const ResourcesPage = lazy(() =>
+  import('./ResourcesPage').then((module) => ({
+    default: module.ResourcesPage,
+  })),
+)
+const TransfersPage = lazy(() =>
+  import('./TransfersPage').then((module) => ({
+    default: module.TransfersPage,
+  })),
+)
+const WorkflowsPage = lazy(() =>
+  import('./WorkflowsPage').then((module) => ({
+    default: module.WorkflowsPage,
+  })),
+)
+const RuntimePage = lazy(() =>
+  import('./RuntimePage').then((module) => ({ default: module.RuntimePage })),
+)
+const ActivityPage = lazy(() =>
+  import('./ActivityPage').then((module) => ({ default: module.ActivityPage })),
+)
 
 const validPages = new Set<PageId>([
   'overview',
@@ -52,7 +70,15 @@ function App() {
 
   return (
     <AppFrame activePage={page} onNavigate={navigate}>
-      {content}
+      <Suspense
+        fallback={
+          <Center py="xl" aria-label="Loading page">
+            <Loader size="sm" />
+          </Center>
+        }
+      >
+        {content}
+      </Suspense>
     </AppFrame>
   )
 }

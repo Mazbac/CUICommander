@@ -2,19 +2,27 @@ import { ControlPlaneRequestError } from './controlPlane'
 
 export type RemoteAccessState = {
   provider: 'tailscale'
+  mode: 'system' | 'action-node'
   installed: boolean
   version: string
   connected: boolean
   dnsName: string
   existingServices: number
   occupiedFunnelPorts: number[]
+  systemPort443Available: boolean
   recommendedFunnelPort: number | null
   configured: boolean
   active: boolean
+  customGptCompatible: boolean
   gatewayRunning: boolean
   gatewayPort: number | null
   funnelPort: number | null
   publicBaseUrl: string
+  actionNodeSupported: boolean
+  actionNodeRunning: boolean
+  actionNodeConnected: boolean
+  actionNodeDnsName: string
+  actionNodeLoginUrl: string
   lastError: string
 }
 
@@ -53,6 +61,15 @@ export async function enableTailscaleRemoteAccess(): Promise<RemoteAccessState> 
   return result
 }
 
+export async function prepareTailscaleActionNode(): Promise<RemoteAccessState> {
+  const result = await remoteJson<RemoteAccessState>(
+    '/cuicommander/v1/local/remote/tailscale/action-node/prepare',
+    { method: 'POST', body: JSON.stringify({ confirmed: true }) },
+  )
+  if (!result) throw new Error('Remote access can only be managed locally.')
+  return result
+}
+
 export async function disableTailscaleRemoteAccess(): Promise<RemoteAccessState> {
   const result = await remoteJson<RemoteAccessState>(
     '/cuicommander/v1/local/remote/tailscale/disable',
@@ -64,18 +81,26 @@ export async function disableTailscaleRemoteAccess(): Promise<RemoteAccessState>
 
 export const developmentRemoteAccess: RemoteAccessState = {
   provider: 'tailscale',
+  mode: 'system',
   installed: true,
   version: '1.102.2',
   connected: true,
   dnsName: 'example-device.example.ts.net',
   existingServices: 2,
   occupiedFunnelPorts: [443, 8443],
-  recommendedFunnelPort: 10000,
+  systemPort443Available: false,
+  recommendedFunnelPort: null,
   configured: false,
   active: false,
+  customGptCompatible: false,
   gatewayRunning: false,
   gatewayPort: null,
   funnelPort: null,
   publicBaseUrl: '',
+  actionNodeSupported: true,
+  actionNodeRunning: false,
+  actionNodeConnected: false,
+  actionNodeDnsName: '',
+  actionNodeLoginUrl: '',
   lastError: '',
 }

@@ -10,6 +10,10 @@ const rules = [
 ]
 const violations = []
 
+function isAllowedSystemToken(relativePath, label) {
+  return label === 'raw hex color' && relativePath === 'src/theme/theme.ts'
+}
+
 function walk(directory) {
   for (const entry of readdirSync(directory, { withFileTypes: true })) {
     const path = join(directory, entry.name)
@@ -18,9 +22,11 @@ function walk(directory) {
       continue
     }
     if (!extensions.has(extname(path))) continue
+    const relativePath = relative('.', path).replaceAll('\\', '/')
     const lines = readFileSync(path, 'utf8').split(/\r?\n/)
     lines.forEach((line, index) => {
       for (const [label, pattern] of rules) {
+        if (isAllowedSystemToken(relativePath, label)) continue
         if (pattern.test(line))
           violations.push(`${relative('.', path)}:${index + 1} — ${label}`)
       }

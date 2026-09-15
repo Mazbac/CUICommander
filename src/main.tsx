@@ -8,7 +8,11 @@ import { cssVariablesResolver, theme } from './theme/theme'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <MantineProvider theme={theme} cssVariablesResolver={cssVariablesResolver}>
+    <MantineProvider
+      theme={theme}
+      cssVariablesResolver={cssVariablesResolver}
+      defaultColorScheme="auto"
+    >
       <App />
     </MantineProvider>
   </StrictMode>,

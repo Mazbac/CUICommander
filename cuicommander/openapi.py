@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from typing import Any
 
@@ -29,9 +29,10 @@ def build_schema(server_url: str, version: str) -> dict[str, Any]:
         },
         "servers": [{"url": server_url.rstrip("/")}],
         "components": {
+            "schemas": {},
             "securitySchemes": {
                 "bearerAuth": {"type": "http", "scheme": "bearer"},
-            }
+            },
         },
         "security": [{"bearerAuth": []}],
         "paths": {},
@@ -51,11 +52,13 @@ def _paths(root: dict[str, Any], path: dict[str, Any], fingerprint: dict[str, An
             "post": {
                 "operationId": "discoverComfyUI",
                 "summary": "Discover live roots, nodes, or HTTP routes",
+                "description": "Discovery is pageable. Follow nextOffset until complete=true so bounded pages never hide installed ComfyUI capabilities.",
                 "requestBody": _json_body(
                     {
                         "kind": {"type": "string", "enum": ["roots", "nodes", "routes"]},
                         "query": {"type": "string", "maxLength": 200},
                         "limit": {"type": "integer", "minimum": 1, "maximum": 500},
+                        "offset": {"type": "integer", "minimum": 0},
                     },
                     ["kind"],
                 ),
@@ -66,7 +69,36 @@ def _paths(root: dict[str, Any], path: dict[str, Any], fingerprint: dict[str, An
             "post": {
                 "operationId": "inspectComfyUIResource",
                 "summary": "Inspect any file or directory inside a discovered ComfyUI root",
-                "requestBody": _json_body({"root": root, "path": path}, ["root", "path"]),
+                "description": "Files return a bounded preview. Directories are pageable; follow nextOffset while truncated is true.",
+                "requestBody": _json_body(
+                    {
+                        "root": root,
+                        "path": path,
+                        "offset": {"type": "integer", "minimum": 0},
+                        "limit": {"type": "integer", "minimum": 1, "maximum": 250},
+                        "expectedFingerprint": fingerprint,
+                    },
+                    ["root", "path"],
+                ),
+                "responses": ok,
+            }
+        },
+        "/cuicommander/v1/resources/read": {
+            "post": {
+                "operationId": "readComfyUIResource",
+                "summary": "Read any regular ComfyUI file completely in bounded chunks",
+                "description": "If inspect reports previewTruncated, follow nextOffset until eof=true. Reuse the first fingerprint as expectedFingerprint so concurrent changes fail safely.",
+                "requestBody": _json_body(
+                    {
+                        "root": root,
+                        "path": path,
+                        "offset": {"type": "integer", "minimum": 0},
+                        "maxBytes": {"type": "integer", "minimum": 1024, "maximum": 131072},
+                        "encoding": {"type": "string", "enum": ["auto", "utf-8", "base64"]},
+                        "expectedFingerprint": fingerprint,
+                    },
+                    ["root", "path"],
+                ),
                 "responses": ok,
             }
         },
@@ -103,6 +135,25 @@ def _mutation_paths(root: dict[str, Any], path: dict[str, Any], fingerprint: dic
                 "responses": ok,
             }
         },
+        "/cuicommander/v1/resources/patch": {
+            "post": {
+                "operationId": "patchComfyUIResource",
+                "summary": "Atomically replace or insert a bounded byte range in a ComfyUI file",
+                "description": "Use for large-file edits after chunked read. offset and deleteBytes are byte counts; content/contentBase64 is the replacement. Use the latest fingerprint after every patch.",
+                "requestBody": _json_body(
+                    {
+                        "root": root,
+                        "path": path,
+                        "expectedFingerprint": fingerprint,
+                        "offset": {"type": "integer", "minimum": 0},
+                        "deleteBytes": {"type": "integer", "minimum": 0},
+                        **common_content,
+                    },
+                    ["root", "path", "expectedFingerprint", "offset", "deleteBytes"],
+                ),
+                "responses": ok,
+            }
+        },
         "/cuicommander/v1/resources/move": {
             "post": {
                 "operationId": "moveComfyUIResource",
@@ -115,7 +166,7 @@ def _mutation_paths(root: dict[str, Any], path: dict[str, Any], fingerprint: dic
                         "targetPath": path,
                         "expectedFingerprint": fingerprint,
                     },
-                    ["root", "path", "targetRoot", "targetPath"],
+                    ["root", "path", "targetRoot", "targetPath", "expectedFingerprint"],
                 ),
                 "responses": ok,
             }
@@ -132,7 +183,7 @@ def _mutation_paths(root: dict[str, Any], path: dict[str, Any], fingerprint: dic
                         "recursive": {"type": "boolean"},
                         "confirmed": {"type": "boolean"},
                     },
-                    ["root", "path", "confirmed"],
+                    ["root", "path", "expectedFingerprint", "confirmed"],
                 ),
                 "responses": ok,
             }
@@ -208,6 +259,23 @@ def _advanced_paths(root: dict[str, Any], path: dict[str, Any], ok: dict[str, An
                 "summary": "Cancel a running CUICommander background job",
                 "parameters": [job_id],
                 "requestBody": _json_body({"confirmed": {"type": "boolean"}}, ["confirmed"]),
+                "responses": ok,
+            }
+        },
+        "/cuicommander/v1/runtime/responses/read": {
+            "post": {
+                "operationId": "readComfyUIResponse",
+                "summary": "Read a retained large native ComfyUI response in bounded chunks",
+                "description": "Use when executeComfyUI returns bodyTruncated=true and a responseId. Follow nextOffset until eof=true.",
+                "requestBody": _json_body(
+                    {
+                        "responseId": {"type": "string", "format": "uuid"},
+                        "offset": {"type": "integer", "minimum": 0},
+                        "maxBytes": {"type": "integer", "minimum": 1024, "maximum": 131072},
+                        "encoding": {"type": "string", "enum": ["auto", "utf-8", "base64"]},
+                    },
+                    ["responseId"],
+                ),
                 "responses": ok,
             }
         },

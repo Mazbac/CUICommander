@@ -12,6 +12,7 @@ import {
   Text,
   TextInput,
 } from '@mantine/core'
+import { EmptyState } from './components/ui/EmptyState'
 import { PageHeader } from './components/ui/PageHeader'
 import { Section } from './components/ui/Section'
 import {
@@ -23,6 +24,14 @@ import {
 import { useControlPlane } from './hooks/useControlPlane'
 
 type Props = { controlPlane: ReturnType<typeof useControlPlane> }
+
+function jobStatusColor(status: string) {
+  if (status === 'succeeded') return 'green'
+  if (status === 'failed') return 'red'
+  if (status === 'interrupted') return 'yellow'
+  if (status === 'cancelled') return 'gray'
+  return 'brand'
+}
 
 export function TransfersPage({ controlPlane }: Props) {
   const { development, state, request, snapshot } = controlPlane
@@ -138,7 +147,7 @@ export function TransfersPage({ controlPlane }: Props) {
         title="Transfers & jobs"
         description="Stream public HTTP(S) assets into discovered ComfyUI roots and inspect durable job state."
         actions={
-          <Button variant="default" onClick={() => void refresh()}>
+          <Button variant="light" onClick={() => void refresh()}>
             Refresh
           </Button>
         }
@@ -148,7 +157,7 @@ export function TransfersPage({ controlPlane }: Props) {
         title="New download"
         description="Downloads are bounded, resumeless, checksum-aware, and finalized atomically."
       >
-        <Paper withBorder p="lg">
+        <Paper withBorder p="lg" className="cc-surface">
           <Stack gap="md">
             <Select
               label="Destination root"
@@ -194,11 +203,12 @@ export function TransfersPage({ controlPlane }: Props) {
         title="Recent jobs"
         description="Running work is polled; incomplete work survives restart as interrupted state."
       >
-        <Paper withBorder p="lg">
+        <Paper withBorder className="cc-surface">
           {jobs.length === 0 ? (
-            <Text c="dimmed" size="sm">
-              No recent CUICommander jobs.
-            </Text>
+            <EmptyState
+              title="No jobs yet"
+              description="Downloads and other durable CUICommander work will appear here."
+            />
           ) : (
             <Table.ScrollContainer minWidth={760}>
               <Table striped highlightOnHover>
@@ -235,7 +245,10 @@ export function TransfersPage({ controlPlane }: Props) {
                           </Text>
                         </Table.Td>
                         <Table.Td>
-                          <Badge color="dark" variant="outline">
+                          <Badge
+                            color={jobStatusColor(job.status)}
+                            variant="light"
+                          >
                             {job.status}
                           </Badge>
                         </Table.Td>

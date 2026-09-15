@@ -13,6 +13,9 @@ from typing import Any
 from .roots import contains_internal_state, resolve_path
 
 MAX_PREVIEW_BYTES = 65536
+MAX_READ_BYTES = 128 * 1024
+DEFAULT_READ_BYTES = 64 * 1024
+MAX_PATCH_BYTES = 256 * 1024
 MAX_DIRECTORY_ITEMS = 250
 CONTENT_HASH_LIMIT = 32 * 1024 * 1024
 LARGE_FILE_SAMPLE_BYTES = 64 * 1024
@@ -85,12 +88,21 @@ def _directory_fingerprint(path: Path) -> str:
     return digest.hexdigest()
 
 
-def inspect_resource(root: str, relative_path: str) -> dict[str, Any]:
+def inspect_resource(
+    root: str,
+    relative_path: str,
+    *,
+    offset: int = 0,
+    limit: int = MAX_DIRECTORY_ITEMS,
+    expected_fingerprint: str | None = None,
+) -> dict[str, Any]:
     _, path = resolve_path(root, relative_path)
     info = _metadata(path)
     info["root"] = root
     info["path"] = relative_path.replace("\\", "/")
     current, mode = fingerprint(path)
+    if expected_fingerprint and current != str(expected_fingerprint).lower():
+        raise RuntimeError("Resource changed while it was being paged; inspect again from offset 0.")
     info["fingerprint"] = current
     info["fingerprintMode"] = mode
 
@@ -98,26 +110,35 @@ def inspect_resource(root: str, relative_path: str) -> dict[str, Any]:
         info["preview"] = None
         return info
     if path.is_dir():
-        info.update(_inspect_directory(path))
+        info.update(_inspect_directory(path, offset=offset, limit=limit))
     else:
         info.update(_inspect_file(path))
     return info
 
 
-def _inspect_directory(path: Path) -> dict[str, Any]:
+def _inspect_directory(path: Path, *, offset: int = 0, limit: int = MAX_DIRECTORY_ITEMS) -> dict[str, Any]:
+    if offset < 0:
+        raise ValueError("offset must be zero or greater.")
+    bounded_limit = max(1, min(int(limit), MAX_DIRECTORY_ITEMS))
     items: list[dict[str, Any]] = []
-    truncated = False
     with os.scandir(path) as entries:
-        for index, entry in enumerate(entries):
-            if index >= MAX_DIRECTORY_ITEMS:
-                truncated = True
-                break
+        for entry in entries:
             try:
                 items.append(_metadata(Path(entry.path)))
             except OSError:
                 items.append({"name": entry.name, "type": "unreadable"})
     items.sort(key=lambda item: (item.get("type") != "directory", str(item.get("name", "")).lower()))
-    return {"items": items, "truncated": truncated}
+    page = items[offset : offset + bounded_limit]
+    next_offset = offset + len(page)
+    complete = next_offset >= len(items)
+    return {
+        "items": page,
+        "itemOffset": offset,
+        "itemLimit": bounded_limit,
+        "totalItems": len(items),
+        "nextOffset": None if complete else next_offset,
+        "truncated": not complete,
+    }
 
 
 def _inspect_file(path: Path) -> dict[str, Any]:
@@ -138,6 +159,82 @@ def _inspect_file(path: Path) -> dict[str, Any]:
     result["previewTruncated"] = False
     return result
 
+
+
+def _bounded_read_size(value: Any) -> int:
+    requested = DEFAULT_READ_BYTES if value is None else int(value)
+    if requested < 1024:
+        raise ValueError("maxBytes must be at least 1024.")
+    return min(requested, MAX_READ_BYTES)
+
+
+def _decode_utf8_prefix(raw: bytes, limit: int) -> tuple[str, int] | None:
+    candidate = raw[:limit]
+    try:
+        return candidate.decode("utf-8"), len(candidate)
+    except UnicodeDecodeError as error:
+        if error.reason == "unexpected end of data" and error.end == len(candidate):
+            complete = candidate[: error.start]
+            if complete:
+                return complete.decode("utf-8"), len(complete)
+        return None
+
+
+def read_resource(input_data: dict[str, Any]) -> dict[str, Any]:
+    root_id = str(input_data.get("root", ""))
+    relative_path = str(input_data.get("path", ""))
+    offset = int(input_data.get("offset", 0))
+    if offset < 0:
+        raise ValueError("offset must be zero or greater.")
+    max_bytes = _bounded_read_size(input_data.get("maxBytes"))
+    encoding = str(input_data.get("encoding", "auto")).lower()
+    if encoding not in {"auto", "utf-8", "base64"}:
+        raise ValueError("encoding must be auto, utf-8, or base64.")
+
+    _, path = resolve_path(root_id, relative_path)
+    if path.is_symlink() or not path.is_file():
+        raise ValueError("Chunked read targets regular files only.")
+    current, mode = fingerprint(path)
+    expected = input_data.get("expectedFingerprint")
+    if expected and current != str(expected).lower():
+        raise RuntimeError("Resource changed during chunked read; restart from offset 0.")
+    total = path.stat().st_size
+    if offset > total:
+        raise ValueError("offset exceeds file size.")
+
+    mime, _ = mimetypes.guess_type(path.name)
+    with path.open("rb") as handle:
+        handle.seek(offset)
+        raw = handle.read(max_bytes + 4)
+
+    payload = raw[:max_bytes]
+    result: dict[str, Any] = {
+        "root": root_id,
+        "path": relative_path.replace("\\", "/"),
+        "size": total,
+        "offset": offset,
+        "fingerprint": current,
+        "fingerprintMode": mode,
+        "mimeType": mime or "application/octet-stream",
+    }
+    decoded = None if encoding == "base64" else _decode_utf8_prefix(raw, max_bytes)
+    if decoded is not None:
+        text, consumed = decoded
+        result["encoding"] = "utf-8"
+        result["content"] = text
+    elif encoding == "utf-8":
+        raise ValueError("Requested chunk is not valid UTF-8 at this byte offset.")
+    else:
+        consumed = len(payload)
+        result["encoding"] = "base64"
+        result["contentBase64"] = base64.b64encode(payload).decode("ascii")
+
+    next_offset = offset + consumed
+    eof = next_offset >= total
+    result["bytesRead"] = consumed
+    result["eof"] = eof
+    result["nextOffset"] = None if eof else next_offset
+    return result
 
 def _decode_content(input_data: dict[str, Any]) -> bytes:
     has_text = "content" in input_data
@@ -210,6 +307,55 @@ def update_resource(input_data: dict[str, Any]) -> dict[str, Any]:
     os.replace(temp_name, path)
     return inspect_resource(root, relative_path)
 
+
+
+def patch_resource(input_data: dict[str, Any]) -> dict[str, Any]:
+    root_id = str(input_data.get("root", ""))
+    relative_path = str(input_data.get("path", ""))
+    _, path = resolve_path(root_id, relative_path)
+    if path.is_symlink() or not path.is_file():
+        raise ValueError("Chunked patch targets regular files only.")
+    _require_fingerprint(path, input_data.get("expectedFingerprint"))
+
+    offset = int(input_data.get("offset", 0))
+    delete_bytes = int(input_data.get("deleteBytes", 0))
+    size = path.stat().st_size
+    if offset < 0 or offset > size:
+        raise ValueError("offset must be within the current file.")
+    if delete_bytes < 0 or offset + delete_bytes > size:
+        raise ValueError("deleteBytes exceeds the current file bounds.")
+    replacement = _decode_content(input_data)
+    if len(replacement) > MAX_PATCH_BYTES:
+        raise ValueError("Patch content exceeds 256 KiB; apply multiple smaller patches.")
+
+    temp_name = ""
+    try:
+        with path.open("rb") as source, tempfile.NamedTemporaryFile(
+            delete=False, dir=path.parent
+        ) as target:
+            temp_name = target.name
+            remaining = offset
+            while remaining:
+                chunk = source.read(min(1024 * 1024, remaining))
+                if not chunk:
+                    raise OSError("Unexpected end of file while copying patch prefix.")
+                target.write(chunk)
+                remaining -= len(chunk)
+
+            target.write(replacement)
+            source.seek(offset + delete_bytes)
+            shutil.copyfileobj(source, target, length=1024 * 1024)
+            target.flush()
+            os.fsync(target.fileno())
+        os.replace(temp_name, path)
+        temp_name = ""
+    finally:
+        if temp_name:
+            try:
+                Path(temp_name).unlink(missing_ok=True)
+            except OSError:
+                pass
+    return inspect_resource(root_id, relative_path)
 
 def move_resource(input_data: dict[str, Any]) -> dict[str, Any]:
     root = str(input_data.get("root", ""))

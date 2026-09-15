@@ -22,6 +22,18 @@ Before implementing a screen, inspect the closest analogous screen. New list pag
 
 Typography, spacing, control sizes, radii, borders, colors, shadows, breakpoints, focus treatment, and motion belong to the theme or shared components. Semantic color communicates status; color is never the only status signal.
 
+## Product visual direction
+
+- The product uses a neutral-first light/dark palette with one deep-blue product accent for interactive emphasis. Green, amber/yellow, and red are reserved for semantic status.
+- Raw palette values may exist only in `src/theme/theme.ts`; feature code and CSS consume semantic/theme tokens instead.
+- Light mode uses a pale neutral shell with white surfaces; dark mode uses near-black chrome with charcoal surfaces. Both modes preserve the same hierarchy, spacing, and component geometry.
+- Appearance supports System, Light, and Dark. System is the default; an explicit user choice persists through Mantine color-scheme storage.
+- Cards and setup surfaces use the shared surface radius; controls and navigation use the shared control radius. Feature screens do not invent local corner styles.
+- The shell uses a quiet neutral background with white/dark shared surfaces and one border token. Shadows are exceptional, not structural.
+- Status badges use high-contrast foregrounds and text labels; do not rely on color alone. Warning surfaces must meet WCAG AA in both supported color schemes.
+- First-run setup uses progressive disclosure: show the next required step, keep advanced transport/schema details secondary, and never expose raw ComfyUI as the public endpoint.
+- Reflow is a release gate at 320px, 390px, and desktop widths; clipped badges, horizontal overflow, and one-off responsive exceptions are regressions.
+
 ## Applicable states
 
 For each feature, explicitly determine which states apply: default, hover/focus/disabled, loading, empty, error, partial/stale data, offline/reconnecting, permission/read-only, success, destructive/reversible, long/missing content, and supported viewport/input modes. Do not implement impossible states merely to satisfy a checklist.

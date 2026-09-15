@@ -1,5 +1,15 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Badge, Button, Code, Paper, Stack, Table, Text } from '@mantine/core'
+import {
+  Alert,
+  Badge,
+  Button,
+  Code,
+  Paper,
+  Stack,
+  Table,
+  Text,
+} from '@mantine/core'
+import { EmptyState } from './components/ui/EmptyState'
 import { PageHeader } from './components/ui/PageHeader'
 import { Section } from './components/ui/Section'
 import { developmentActivity, type ActivityItem } from './data/operator'
@@ -45,27 +55,26 @@ export function ActivityPage({ controlPlane }: Props) {
         title="Activity"
         description="Recent CUICommander mutations and control-plane actions. Sensitive content and credentials are deliberately not recorded."
         actions={
-          <Button variant="default" onClick={() => void refresh()}>
+          <Button variant="light" onClick={() => void refresh()}>
             Refresh
           </Button>
         }
       />
       {error && (
-        <Paper withBorder p="md">
-          <Text c="red" size="sm">
-            {error}
-          </Text>
-        </Paper>
+        <Alert color="red" title="Activity could not be loaded">
+          {error}
+        </Alert>
       )}
       <Section
         title="Recent activity"
         description="This is an operational audit trail, not a full packet/body log."
       >
-        <Paper withBorder p="lg">
+        <Paper withBorder className="cc-surface">
           {items.length === 0 ? (
-            <Text c="dimmed" size="sm">
-              No recorded CUICommander mutation activity yet.
-            </Text>
+            <EmptyState
+              title="No activity yet"
+              description="Consequential CUICommander operations will appear here without credentials or resource contents."
+            />
           ) : (
             <Table.ScrollContainer minWidth={760}>
               <Table striped highlightOnHover>

@@ -13,9 +13,9 @@ CUICommander is a ComfyUI custom-node/server extension with a small React operat
 
 The invariant is: if the running ComfyUI process owns, registers, exposes, or can legitimately operate a ComfyUI subsystem, CUICommander must retain a vendor-independent route to it.
 
-1. **Discovery plane** — live nodes, route inventory, registered model/path roots, system state, and CUICommander capability manifest.
-2. **Structured resource plane** — generic filesystem CRUD, background downloads, durable bounded job records, and redacted mutation activity.
-3. **Native execution plane** — one generic executor for routes that exist in the live ComfyUI/custom-node aiohttp router.
+1. **Discovery plane** — live nodes, route inventory, registered model/path roots, system state, and CUICommander capability manifest. Bounded result sets are pageable rather than silently incomplete.
+2. **Structured resource plane** — generic filesystem CRUD, complete chunked reads, stale-safe atomic byte-range patches, background downloads, durable bounded job records, and redacted mutation activity.
+3. **Native execution plane** — one generic executor for routes that exist in the live ComfyUI/custom-node aiohttp router. Large native responses are retained temporarily and exposed through bounded continuation reads instead of being discarded after the inline limit.
 4. **Full-control fallback plane** — bounded ComfyUI-scoped primitives only for proven gaps that discovery, CRUD/transfers, and native routes cannot express.
 
 There is no required provider adapter layer. Node packs, model families, and software installed later must remain reachable through the same generic planes.
@@ -25,7 +25,8 @@ There is no required provider adapter layer. Node packs, model families, and sof
 - `folder_paths.base_path` is the canonical `comfyui` root, so the complete ComfyUI installation tree is reachable.
 - Input, output, temp, user, models, custom nodes, and every path in `folder_paths.folder_names_and_paths` are discovered dynamically.
 - Registered paths outside the base directory are separate roots; traversal, absolute-path injection, symlink escape, and CUICommander credential-state access are rejected.
-- Existing-resource mutations require fresh fingerprints. Small files use full SHA-256, large files use bounded content sampling plus metadata, and directories use tree metadata.
+- Existing-resource mutations require fresh fingerprints. Small files use full SHA-256, large files use bounded content sampling plus metadata, and directories use tree metadata. Directory pagination and chunked file reads can carry the first fingerprint forward so concurrent changes fail safely.
+- File previews are convenience only. Any regular file remains completely readable in bounded chunks, including binary data, and large edits can be expressed as repeated atomic byte-range patches without sending the whole file in one request.
 - Large model/assets ingress is one generic background download primitive, not checkpoint/LoRA/provider installers.
 - Downloads stream into partial files, report bounded progress, support cancellation and optional SHA-256 verification, retry bounded transient failures, and finalize atomically.
 - Download jobs persist in bounded CUICommander state. If ComfyUI restarts mid-job, the restored record becomes `interrupted` rather than pretending work is still running.
@@ -36,7 +37,7 @@ There is no required provider adapter layer. Node packs, model families, and sof
 
 `executeComfyUI` does not reproduce ComfyUI's `/prompt`, queue, history, jobs, or custom-node handlers. It first verifies that the requested method/path exists in the live router, then invokes that route on the same running ComfyUI instance. GET is read-only; non-GET execution requires Full control plus explicit confirmation. CUICommander routes cannot recursively execute themselves.
 
-This means upstream changes and newly installed custom-node routes remain reachable without adding route-specific CUICommander code, while ComfyUI keeps ownership of its own validation and runtime behavior.
+This means upstream changes and newly installed custom-node routes remain reachable without adding route-specific CUICommander code, while ComfyUI keeps ownership of its own validation and runtime behavior. Native responses that exceed the inline payload limit are spooled into a bounded temporary response handle and read back in chunks; the inline limit therefore does not silently destroy the remainder of an ordinary response.
 
 ## Machine control language
 

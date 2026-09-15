@@ -67,3 +67,7 @@ The first built-in zero-cost transport is Tailscale Funnel because it provides p
 ## 2026-09-14 — D015: Operator UI composes generic primitives
 
 Resources, Transfers & Jobs, Workflows, Runtime, and Activity are human-facing operational surfaces over the same generic control planes used by Actions. Workflow UI may provide JSON editing, fingerprint-safe persistence, and queue controls, but it must not introduce model-family or custom-node-suite backend adapters. Durable jobs and redacted activity are CUICommander-owned operational state; they may improve recovery and auditability without becoming a second scheduler or workflow engine.
+
+## 2026-09-15 — D016: Bounded results remain continuable
+
+Payload, safety, and UI limits may bound one response, but they must not turn otherwise reachable ComfyUI-owned state into inaccessible state. Discovery and directories use pagination, regular files use chunked reads plus stale-safe range patches, and oversized native responses use temporary continuation handles. A future bound that would silently discard the remainder must add a generic continuation path rather than a provider- or node-specific adapter.

@@ -19,14 +19,15 @@
 
 ## Generic control capabilities
 
-- Discover live node classes and their declared inputs/outputs/categories from ComfyUI's node registry.
-- Discover the active aiohttp route surface, including routes added by custom nodes.
+- Discover live node classes and their declared inputs/outputs/categories from ComfyUI's node registry, with continuation when the result set exceeds one page.
+- Discover the active aiohttp route surface, including routes added by custom nodes, with the same pageable contract.
 - Discover the ComfyUI base directory plus input/output/temp/user/models/custom-nodes and every model/path root registered through `folder_paths`.
-- Inspect files/directories with bounded previews and fingerprints without special knowledge of the file's vendor or model family.
+- Inspect files/directories with bounded previews and fingerprints without special knowledge of the file's vendor or model family; previews and directory pages have continuation paths to complete access.
+- Read arbitrary regular files completely in bounded UTF-8 or Base64 chunks and make large edits through repeated stale-safe atomic byte-range patches.
 - Create, update, move, and delete ComfyUI-scoped filesystem resources with stale-state and path-boundary checks.
 - Stream or background-download large files into a selected discovered root so model installation is a generic filesystem operation.
 - Submit API-format workflows and inspect/cancel queue/job/history state through native ComfyUI primitives.
-- Invoke an existing ComfyUI/custom-node HTTP route generically when that is the narrowest available operation.
+- Invoke an existing ComfyUI/custom-node HTTP route generically when that is the narrowest available operation; responses larger than the inline limit remain readable through retained chunked response handles.
 - Keep activity/job records bounded and useful for verification/recovery.
 
 ## No-adapter rule

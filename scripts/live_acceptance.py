@@ -1,6 +1,7 @@
 ﻿from __future__ import annotations
 
 import argparse
+import base64
 import json
 import os
 import sys
@@ -172,14 +173,17 @@ def _execute_acceptance(base_url: str, token: str, tag: str) -> None:
         raise RuntimeError("Native /system_stats execution did not return HTTP 200.")
     comfy_version = ((system_stats.get("body") or {}).get("system") or {}).get("comfyui_version")
     print(f"execute GET /system_stats: ComfyUI {comfy_version}")
-    node_result = _post(
-        base_url,
-        token,
-        "/cuicommander/v1/discover",
-        {"kind": "nodes", "query": "Latent", "limit": 100},
-    )
-    node_names = {str(item.get("name")) for item in node_result.get("items") or []}
-    if not {"EmptyLatentImage", "SaveLatent"}.issubset(node_names):
+    required_nodes = {"EmptyLatentImage", "SaveLatent"}
+    node_names: set[str] = set()
+    for node_name in sorted(required_nodes):
+        node_result = _post(
+            base_url,
+            token,
+            "/cuicommander/v1/discover",
+            {"kind": "nodes", "query": node_name, "limit": 20},
+        )
+        node_names.update(str(item.get("name")) for item in node_result.get("items") or [])
+    if not required_nodes.issubset(node_names):
         print("prompt: skipped because EmptyLatentImage/SaveLatent were not discovered")
         return
 
@@ -257,6 +261,154 @@ def _execute_acceptance(base_url: str, token: str, tag: str) -> None:
             },
         )
     print("prompt cleanup: passed")
+
+
+def _chunked_resource_acceptance(
+    base_url: str, token: str, root: str, path: str
+) -> None:
+    inspected = _post(
+        base_url,
+        token,
+        "/cuicommander/v1/resources/inspect",
+        {"root": root, "path": path},
+    )
+    if inspected.get("type") != "file":
+        raise RuntimeError("Chunked acceptance target must be a regular file.")
+    fingerprint = str(inspected["fingerprint"])
+    offset = 0
+    parts: list[bytes] = []
+    chunks = 0
+    while True:
+        chunk = _post(
+            base_url,
+            token,
+            "/cuicommander/v1/resources/read",
+            {
+                "root": root,
+                "path": path,
+                "offset": offset,
+                "maxBytes": 131072,
+                "encoding": "base64",
+                "expectedFingerprint": fingerprint,
+            },
+        )
+        parts.append(base64.b64decode(str(chunk.get("contentBase64", ""))))
+        chunks += 1
+        if chunk.get("eof") is True:
+            break
+        next_offset = chunk.get("nextOffset")
+        if not isinstance(next_offset, int) or next_offset <= offset:
+            raise RuntimeError("Chunked resource read did not make forward progress.")
+        offset = next_offset
+    raw = b"".join(parts)
+    if len(raw) != int(inspected.get("size") or 0):
+        raise RuntimeError("Chunked resource read did not reconstruct the complete file.")
+    if path.lower().endswith(".json"):
+        json.loads(raw.decode("utf-8"))
+    print(f"chunked resource: {len(raw)} bytes reconstructed in {chunks} chunk(s)")
+
+
+def _chunk_patch_acceptance(base_url: str, token: str, tag: str) -> None:
+    path = f"cuicommander-acceptance/chunked-{tag}.txt"
+    current = _post(
+        base_url,
+        token,
+        "/cuicommander/v1/resources/create",
+        {"root": "temp", "path": path, "type": "file", "parents": True, "content": ""},
+    )
+    expected = ("alpha-" + ("x" * 70000) + "-omega").encode("utf-8")
+    offset = 0
+    for start in range(0, len(expected), 24000):
+        text = expected[start : start + 24000].decode("utf-8")
+        current = _post(
+            base_url,
+            token,
+            "/cuicommander/v1/resources/patch",
+            {
+                "root": "temp",
+                "path": path,
+                "expectedFingerprint": current["fingerprint"],
+                "offset": offset,
+                "deleteBytes": 0,
+                "content": text,
+            },
+        )
+        offset += len(text.encode("utf-8"))
+    fingerprint = current["fingerprint"]
+    read_offset = 0
+    parts: list[bytes] = []
+    while True:
+        chunk = _post(
+            base_url,
+            token,
+            "/cuicommander/v1/resources/read",
+            {
+                "root": "temp",
+                "path": path,
+                "offset": read_offset,
+                "encoding": "base64",
+                "expectedFingerprint": fingerprint,
+            },
+        )
+        parts.append(base64.b64decode(str(chunk.get("contentBase64", ""))))
+        if chunk.get("eof") is True:
+            break
+        read_offset = int(chunk["nextOffset"])
+    if b"".join(parts) != expected:
+        raise RuntimeError("Chunk patch acceptance did not reconstruct the expected content.")
+    _post(
+        base_url,
+        token,
+        "/cuicommander/v1/resources/delete",
+        {
+            "root": "temp",
+            "path": path,
+            "expectedFingerprint": fingerprint,
+            "confirmed": True,
+        },
+    )
+    print("chunked patch: multi-patch append -> complete read -> cleanup passed")
+
+
+def _runtime_continuation_acceptance(base_url: str, token: str) -> None:
+    result = _post(
+        base_url,
+        token,
+        "/cuicommander/v1/execute",
+        {"method": "GET", "route": "/object_info"},
+    )
+    response_id = result.get("responseId")
+    if not response_id:
+        print("runtime continuation: /object_info fit inside the inline response limit")
+        return
+    offset = 0
+    parts: list[bytes] = []
+    chunks = 0
+    while True:
+        chunk = _post(
+            base_url,
+            token,
+            "/cuicommander/v1/runtime/responses/read",
+            {
+                "responseId": response_id,
+                "offset": offset,
+                "maxBytes": 131072,
+                "encoding": "base64",
+            },
+        )
+        parts.append(base64.b64decode(str(chunk.get("contentBase64", ""))))
+        chunks += 1
+        if chunk.get("eof") is True:
+            break
+        next_offset = chunk.get("nextOffset")
+        if not isinstance(next_offset, int) or next_offset <= offset:
+            raise RuntimeError("Runtime response continuation did not make forward progress.")
+        offset = next_offset
+    raw = b"".join(parts)
+    if len(raw) != int(result.get("responseSize") or 0):
+        raise RuntimeError("Runtime continuation did not reconstruct the complete response.")
+    json.loads(raw.decode("utf-8"))
+    print(f"runtime continuation: {len(raw)} bytes reconstructed in {chunks} chunk(s)")
 
 
 def _download_acceptance(base_url: str, token: str, tag: str, url: str) -> None:
@@ -337,19 +489,35 @@ def main() -> int:
         "--download-url",
         help="Optional public HTTP(S) URL used to live-test the background downloader.",
     )
+    parser.add_argument(
+        "--resource-root",
+        help="Optional discovered root id for complete chunked-read acceptance.",
+    )
+    parser.add_argument(
+        "--resource-path",
+        help="Optional relative file path for complete chunked-read acceptance.",
+    )
     args = parser.parse_args()
 
     token = _read_token(args.token_file)
     tag = uuid.uuid4().hex[:10]
     try:
         manifest = _readonly_acceptance(args.base_url, token)
+        if bool(args.resource_root) != bool(args.resource_path):
+            raise RuntimeError("--resource-root and --resource-path must be provided together.")
+        if args.resource_root and args.resource_path:
+            _chunked_resource_acceptance(
+                args.base_url, token, args.resource_root, args.resource_path
+            )
         if not args.mutating:
             print("Live read-only acceptance passed.")
             return 0
         if manifest.get("accessLevel") != "full":
             raise RuntimeError("--mutating requires CUICommander Full control access.")
         _crud_acceptance(args.base_url, token, tag)
+        _chunk_patch_acceptance(args.base_url, token, tag)
         _execute_acceptance(args.base_url, token, tag)
+        _runtime_continuation_acceptance(args.base_url, token)
         if args.download_url:
             _download_acceptance(args.base_url, token, tag, args.download_url)
         _cleanup_empty_directory(

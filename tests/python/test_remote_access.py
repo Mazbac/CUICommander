@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import tempfile
 import unittest
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, call, patch
 
@@ -16,6 +18,18 @@ from cuicommander.remote_access import (
 
 
 class RemoteAccessPlanningTests(unittest.TestCase):
+    def test_remote_state_loader_accepts_utf8_bom(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "remote.json"
+            path.write_text(
+                '\ufeff{"mode":"action-node","enabled":true}',
+                encoding="utf-8",
+            )
+            with patch.object(remote_access, "_state_path", return_value=path):
+                state = remote_access._load_state()
+        self.assertEqual(state["mode"], "action-node")
+        self.assertTrue(state["enabled"])
+
     def test_existing_tailscale_services_are_not_selected(self) -> None:
         config = {
             "TCP": {"443": {"HTTPS": True}, "8443": {"HTTPS": True}},
@@ -106,13 +120,13 @@ class RemoteAccessLifecycleTests(unittest.IsolatedAsyncioTestCase):
             "connected": True,
             "dnsName": "pc.example.ts.net",
             "funnel": {
-                "TCP": {"443": {}, "8443": {}, "10000": {}},
+                "TCP": {"443": {}, "8443": {}},
                 "Web": {
-                    "pc.example.ts.net:10000": {
+                    "pc.example.ts.net:443": {
                         "Handlers": {"/": {"Proxy": "http://127.0.0.1:8766"}}
                     }
                 },
-                "AllowFunnel": {"pc.example.ts.net:10000": True},
+                "AllowFunnel": {"pc.example.ts.net:443": True},
             },
         }
         with (
@@ -120,8 +134,9 @@ class RemoteAccessLifecycleTests(unittest.IsolatedAsyncioTestCase):
             patch.object(remote_access, "_tailscale_snapshot", return_value=snapshot),
         ):
             status = remote_access._status_payload()
-        self.assertEqual(status["recommendedFunnelPort"], 10000)
+        self.assertIsNone(status["recommendedFunnelPort"])
         self.assertFalse(status["active"])
+        self.assertFalse(status["customGptCompatible"])
 
     async def test_enable_rolls_back_public_url_and_owned_funnel_on_state_write_failure(self) -> None:
         initial = {
@@ -129,7 +144,7 @@ class RemoteAccessLifecycleTests(unittest.IsolatedAsyncioTestCase):
             "connected": True,
             "dnsName": "pc.example.ts.net",
             "funnel": {
-                "TCP": {"443": {}, "8443": {}},
+                "TCP": {"8443": {}},
                 "Web": {},
                 "AllowFunnel": {},
             },
@@ -137,13 +152,13 @@ class RemoteAccessLifecycleTests(unittest.IsolatedAsyncioTestCase):
         refreshed = {
             **initial,
             "funnel": {
-                "TCP": {"443": {}, "8443": {}, "10000": {}},
+                "TCP": {"443": {}, "8443": {}},
                 "Web": {
-                    "pc.example.ts.net:10000": {
+                    "pc.example.ts.net:443": {
                         "Handlers": {"/": {"Proxy": "http://127.0.0.1:8766"}}
                     }
                 },
-                "AllowFunnel": {"pc.example.ts.net:10000": True},
+                "AllowFunnel": {"pc.example.ts.net:443": True},
             },
         }
         command_result = SimpleNamespace(returncode=0, stdout="", stderr="")
@@ -165,10 +180,99 @@ class RemoteAccessLifecycleTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(
             set_public.call_args_list,
-            [call("https://pc.example.ts.net:10000"), call("https://manual.example")],
+            [call("https://pc.example.ts.net"), call("https://manual.example")],
         )
         self.assertEqual(run_ts.call_count, 2)
         stop_gateway.assert_awaited_once()
+
+    async def test_enable_uses_isolated_action_node_when_system_443_is_occupied(self) -> None:
+        system = {
+            "installed": True,
+            "version": "1.0",
+            "connected": True,
+            "dnsName": "pc.example.ts.net",
+            "funnel": {"TCP": {"443": {}}, "Web": {}, "AllowFunnel": {}},
+        }
+        action_initial = {
+            "installed": True,
+            "version": "1.0",
+            "connected": True,
+            "dnsName": "cuicommander-pc.example.ts.net",
+            "funnel": {"TCP": {}, "Web": {}, "AllowFunnel": {}},
+        }
+        action_refreshed = {
+            **action_initial,
+            "funnel": {
+                "TCP": {"443": {}},
+                "Web": {
+                    "cuicommander-pc.example.ts.net:443": {
+                        "Handlers": {"/": {"Proxy": "http://127.0.0.1:8766"}}
+                    }
+                },
+                "AllowFunnel": {"cuicommander-pc.example.ts.net:443": True},
+            },
+        }
+        command_result = SimpleNamespace(returncode=0, stdout="", stderr="")
+        write_state = MagicMock()
+        set_public = MagicMock()
+        with (
+            patch.object(remote_access, "_load_state", return_value={}),
+            patch.object(remote_access, "_tailscale_snapshot", side_effect=[system, action_refreshed]),
+            patch.object(remote_access, "_try_action_node_snapshot", return_value=action_initial),
+            patch.object(remote_access, "_choose_gateway_port", return_value=8766),
+            patch.object(remote_access, "public_base_url", return_value=""),
+            patch.object(remote_access, "set_public_base_url", set_public),
+            patch.object(remote_access, "_write_state", write_state),
+            patch.object(remote_access, "_run_tailscale", return_value=command_result) as run_ts,
+            patch.object(remote_access, "_verify_public_gateway", new=AsyncMock()),
+            patch.object(remote_access, "_status_payload", return_value={"active": True}),
+            patch.object(remote_access.GATEWAY, "start", new=AsyncMock()),
+            patch.object(remote_access.GATEWAY, "stop", new=AsyncMock()),
+        ):
+            result = await remote_access.enable_tailscale_remote_access()
+
+        self.assertEqual(result, {"active": True})
+        written = write_state.call_args.args[0]
+        self.assertEqual(written["mode"], "action-node")
+        self.assertEqual(written["funnelPort"], 443)
+        self.assertEqual(
+            written["publicBaseUrl"],
+            "https://cuicommander-pc.example.ts.net",
+        )
+        set_public.assert_called_once_with("https://cuicommander-pc.example.ts.net")
+        self.assertEqual(run_ts.call_args.args[-1], remote_access._ACTION_NODE_SOCKET)
+
+    async def test_enable_refuses_port_10000_fallback_for_custom_gpt(self) -> None:
+        system = {
+            "installed": True,
+            "version": "1.0",
+            "connected": True,
+            "dnsName": "pc.example.ts.net",
+            "funnel": {"TCP": {"443": {}, "8443": {}}, "Web": {}, "AllowFunnel": {}},
+        }
+        with (
+            patch.object(remote_access, "_load_state", return_value={}),
+            patch.object(remote_access, "_tailscale_snapshot", return_value=system),
+            patch.object(remote_access, "_try_action_node_snapshot", return_value=None),
+            patch.object(remote_access, "public_base_url", return_value=""),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "isolated Custom GPT endpoint"):
+                await remote_access.enable_tailscale_remote_access()
+
+    def test_prepare_action_node_starts_login_when_needed(self) -> None:
+        with (
+            patch.object(remote_access, "_install_action_node_task") as install,
+            patch.object(remote_access, "_start_action_node_task") as start_task,
+            patch.object(remote_access, "_wait_for_action_node", return_value={"connected": False}),
+            patch.object(remote_access, "_begin_action_node_login", return_value="https://login.tailscale.com/a/test") as begin_login,
+            patch.object(remote_access, "_status_payload", return_value={"actionNodeRunning": True}),
+        ):
+            result = remote_access.prepare_tailscale_action_node()
+
+        self.assertEqual(result, {"actionNodeRunning": True})
+        install.assert_called_once_with()
+        start_task.assert_called_once_with()
+        begin_login.assert_called_once_with()
 
     async def test_disable_restores_previous_manual_https_origin(self) -> None:
         state = {
